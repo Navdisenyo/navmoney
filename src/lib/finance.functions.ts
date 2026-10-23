@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   addDaysISO,
@@ -23,9 +24,6 @@ import {
 // context, never from client input.
 
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
-
-type SupabaseClient = Parameters<Parameters<typeof requireSupabaseAuth.createServerFn>[0]["middleware"]>[0] extends never ? never : never;
-// (placeholder removed below; context typing comes from the middleware itself)
 
 function listSum(rows: { amount: number }[] | null): number {
   return sumMoney((rows ?? []).map((r) => Number(r.amount)));
@@ -446,10 +444,7 @@ export const deleteIncome = createServerFn({ method: "POST" })
  * dedupe unique index (user, title, due_date, amount for recurring rows) and
  * .onConflictDoNothing() skips anything already generated — no check-then-insert.
  */
-async function materializeRecurring(
-  supabase: Awaited<ReturnType<typeof requireSupabaseAuth.server>> extends never ? never : any,
-  userId: string,
-) {
+async function materializeRecurring(supabase: SupabaseClient, userId: string) {
   const today = todayISO();
   const { data: series, error } = await supabase
     .from("expenses")
