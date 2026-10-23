@@ -819,7 +819,7 @@ export const unmarkEmiPaid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ emi_id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { supabase } = context;
     const { data: emi } = await supabase
       .from("emi_payments")
       .select("id, amount, status, loan_id, paid_date")
@@ -851,7 +851,6 @@ export const unmarkEmiPaid = createServerFn({ method: "POST" })
         await supabase.from("loans").update(patch).eq("id", loan.id);
       }
     }
-    void userId;
     return { ok: true as const };
   });
 
