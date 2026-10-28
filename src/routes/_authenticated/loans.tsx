@@ -5,8 +5,19 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, BadgeCheck, Undo2 } from "lucide-react";
 
-import { bootstrapQueryOptions, loansQueryOptions, type EmiRow, type Loan } from "@/lib/finance-queries";
-import { deleteLoan, loanSchema, markEmiPaid, saveLoan, unmarkEmiPaid } from "@/lib/finance.functions";
+import {
+  bootstrapQueryOptions,
+  loansQueryOptions,
+  type EmiRow,
+  type Loan,
+} from "@/lib/finance-queries";
+import {
+  deleteLoan,
+  loanSchema,
+  markEmiPaid,
+  saveLoan,
+  unmarkEmiPaid,
+} from "@/lib/finance.functions";
 import { formatCompact, formatCurrency, formatDate, todayISO } from "@/lib/finance-calc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,9 +49,15 @@ export const Route = createFileRoute("/_authenticated/loans")({
   head: () => ({
     meta: [
       { title: "Loans & EMI — Artha" },
-      { name: "description", content: "Loan schedules with one-tap EMI tracking that stays in sync with expenses." },
+      {
+        name: "description",
+        content: "Loan schedules with one-tap EMI tracking that stays in sync with expenses.",
+      },
       { property: "og:title", content: "Loans & EMI — Artha" },
-      { property: "og:description", content: "EMI schedules with paid tracking synced to expenses." },
+      {
+        property: "og:description",
+        content: "EMI schedules with paid tracking synced to expenses.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -86,8 +103,10 @@ function toForm(loan: Loan): FormState {
     interest_rate: loan.interest_rate != null ? String(loan.interest_rate) : "",
     start_date: loan.start_date,
     monthly_due_day: String(loan.monthly_due_day),
-    remaining_installments: loan.remaining_installments != null ? String(loan.remaining_installments) : "",
-    outstanding_principal: loan.outstanding_principal != null ? String(loan.outstanding_principal) : "",
+    remaining_installments:
+      loan.remaining_installments != null ? String(loan.remaining_installments) : "",
+    outstanding_principal:
+      loan.outstanding_principal != null ? String(loan.outstanding_principal) : "",
     notes: loan.notes ?? "",
   };
 }
@@ -225,19 +244,30 @@ function LoansPage() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-display font-semibold">{loan.name}</h2>
-                    <Badge variant={loan.status === "active" ? "default" : "outline"}
-                      className={loan.status === "active" ? "bg-primary text-primary-foreground" : ""}>
+                    <Badge
+                      variant={loan.status === "active" ? "default" : "outline"}
+                      className={
+                        loan.status === "active" ? "bg-primary text-primary-foreground" : ""
+                      }
+                    >
                       {loan.status === "active" ? "Active" : "Closed"}
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {loan.lender ? `${loan.lender} · ` : ""}
-                    {Number(loan.interest_rate ?? 0) > 0 ? `${Number(loan.interest_rate)}% p.a. · ` : ""}
+                    {Number(loan.interest_rate ?? 0) > 0
+                      ? `${Number(loan.interest_rate)}% p.a. · `
+                      : ""}
                     due day {loan.monthly_due_day}
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" aria-label={`Edit ${loan.name}`} onClick={() => openEdit(loan)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Edit ${loan.name}`}
+                    onClick={() => openEdit(loan)}
+                  >
                     <Pencil className="size-4" />
                   </Button>
                   <Button
@@ -256,17 +286,23 @@ function LoansPage() {
               <div className="grid gap-4 p-5 sm:grid-cols-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Loan amount</p>
-                  <p className="font-display font-semibold tabular-nums">{fmt(Number(loan.original_amount))}</p>
+                  <p className="font-display font-semibold tabular-nums">
+                    {fmt(Number(loan.original_amount))}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Outstanding</p>
                   <p className="font-display font-semibold tabular-nums">
-                    {loan.outstanding_principal != null ? fmt(Number(loan.outstanding_principal)) : "—"}
+                    {loan.outstanding_principal != null
+                      ? fmt(Number(loan.outstanding_principal))
+                      : "—"}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">EMI</p>
-                  <p className="font-display font-semibold tabular-nums">{fmt(Number(loan.emi_amount))} / month</p>
+                  <p className="font-display font-semibold tabular-nums">
+                    {fmt(Number(loan.emi_amount))} / month
+                  </p>
                 </div>
                 <div className="sm:col-span-3">
                   <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
@@ -294,8 +330,12 @@ function LoansPage() {
                     <tbody>
                       {emis.map((emi) => (
                         <tr key={emi.id} className="border-b last:border-0">
-                          <td className="px-5 py-2.5 tabular-nums text-muted-foreground">{emi.installment_number}</td>
-                          <td className="px-5 py-2.5 tabular-nums">{formatDate(emi.due_date, df)}</td>
+                          <td className="px-5 py-2.5 tabular-nums text-muted-foreground">
+                            {emi.installment_number}
+                          </td>
+                          <td className="px-5 py-2.5 tabular-nums">
+                            {formatDate(emi.due_date, df)}
+                          </td>
                           <td className="px-5 py-2.5 tabular-nums">{fmt(Number(emi.amount))}</td>
                           <td className="px-5 py-2.5">
                             <Badge
@@ -309,11 +349,21 @@ function LoansPage() {
                           </td>
                           <td className="px-5 py-2.5 text-right">
                             {emi.status === "paid" ? (
-                              <Button variant="ghost" size="sm" disabled={unmarkPaid.isPending} onClick={() => unmarkPaid.mutate(emi)}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={unmarkPaid.isPending}
+                                onClick={() => unmarkPaid.mutate(emi)}
+                              >
                                 <Undo2 className="size-4" /> Undo
                               </Button>
                             ) : (
-                              <Button variant="ghost" size="sm" disabled={markPaid.isPending} onClick={() => markPaid.mutate(emi)}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={markPaid.isPending}
+                                onClick={() => markPaid.mutate(emi)}
+                              >
                                 <BadgeCheck className="size-4" /> Mark paid
                               </Button>
                             )}
@@ -338,37 +388,87 @@ function LoansPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="loan-name">Name</Label>
-                <Input id="loan-name" required value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder="e.g. Car loan" />
+                <Input
+                  id="loan-name"
+                  required
+                  value={form.name}
+                  onChange={(e) => set("name")(e.target.value)}
+                  placeholder="e.g. Car loan"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loan-lender">Lender</Label>
-                <Input id="loan-lender" value={form.lender} onChange={(e) => set("lender")(e.target.value)} placeholder="Optional" />
+                <Input
+                  id="loan-lender"
+                  value={form.lender}
+                  onChange={(e) => set("lender")(e.target.value)}
+                  placeholder="Optional"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="loan-amount">Loan amount (₹)</Label>
-                <Input id="loan-amount" required type="number" min="0" step="0.01" value={form.original_amount} onChange={(e) => set("original_amount")(e.target.value)} />
+                <Input
+                  id="loan-amount"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.original_amount}
+                  onChange={(e) => set("original_amount")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loan-emi">Monthly EMI (₹)</Label>
-                <Input id="loan-emi" required type="number" min="0.01" step="0.01" value={form.emi_amount} onChange={(e) => set("emi_amount")(e.target.value)} />
+                <Input
+                  id="loan-emi"
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.emi_amount}
+                  onChange={(e) => set("emi_amount")(e.target.value)}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="loan-rate">Interest rate (%)</Label>
-                <Input id="loan-rate" type="number" min="0" max="100" step="0.01" value={form.interest_rate} onChange={(e) => set("interest_rate")(e.target.value)} placeholder="Optional" />
+                <Input
+                  id="loan-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.interest_rate}
+                  onChange={(e) => set("interest_rate")(e.target.value)}
+                  placeholder="Optional"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loan-start">Start date</Label>
-                <Input id="loan-start" required type="date" value={form.start_date} onChange={(e) => set("start_date")(e.target.value)} />
+                <Input
+                  id="loan-start"
+                  required
+                  type="date"
+                  value={form.start_date}
+                  onChange={(e) => set("start_date")(e.target.value)}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="loan-day">EMI due day (1–28)</Label>
-                <Input id="loan-day" required type="number" min="1" max="28" value={form.monthly_due_day} onChange={(e) => set("monthly_due_day")(e.target.value)} />
+                <Input
+                  id="loan-day"
+                  required
+                  type="number"
+                  min="1"
+                  max="28"
+                  value={form.monthly_due_day}
+                  onChange={(e) => set("monthly_due_day")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="loan-count">Number of EMIs</Label>

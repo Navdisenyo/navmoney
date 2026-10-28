@@ -7,6 +7,7 @@ import {
   monthlyEquivalentRate,
   nextRecurrenceDate,
   projectValue,
+  requireNonNegative,
   requirePositive,
   roundMoney,
   savingsRate,
@@ -60,17 +61,33 @@ describe("rates and projections", () => {
 
   it("0% rate yields no growth", () => {
     expect(monthlyEquivalentRate(0, "annually")).toBe(0);
-    const p = projectValue({ principal: 100000, annualRatePct: 0, compounding: "annually", months: 24 });
+    const p = projectValue({
+      principal: 100000,
+      annualRatePct: 0,
+      compounding: "annually",
+      months: 24,
+    });
     expect(p.value).toBe(100000);
   });
 
   it("projects 12% APY for 12 months to the principal times 1.12", () => {
-    const p = projectValue({ principal: 100000, annualRatePct: 12, compounding: "annually", months: 12 });
+    const p = projectValue({
+      principal: 100000,
+      annualRatePct: 12,
+      compounding: "annually",
+      months: 12,
+    });
     expect(Math.abs(p.value - 112000)).toBeLessThan(0.01);
   });
 
   it("counts monthly contributions", () => {
-    const p = projectValue({ principal: 0, annualRatePct: 0, compounding: "annually", months: 6, monthlyContribution: 5000 });
+    const p = projectValue({
+      principal: 0,
+      annualRatePct: 0,
+      compounding: "annually",
+      months: 6,
+      monthlyContribution: 5000,
+    });
     expect(p.value).toBe(30000);
     expect(p.totalContributed).toBe(30000);
   });
@@ -105,10 +122,7 @@ describe("dates", () => {
       "2026-12-05",
       "2027-01-05",
     ]);
-    expect(buildEmiSchedule("2026-10-01", 5, 2)).toEqual([
-      "2026-10-05",
-      "2026-11-05",
-    ]);
+    expect(buildEmiSchedule("2026-10-01", 5, 2)).toEqual(["2026-10-05", "2026-11-05"]);
     expect(buildEmiSchedule("2026-01-31", 30, 2)).toEqual([]);
   });
 });

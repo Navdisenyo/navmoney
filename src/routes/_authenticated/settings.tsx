@@ -7,11 +7,7 @@ import { toast } from "sonner";
 import { bootstrapQueryOptions, type Settings } from "@/lib/finance-queries";
 import { updateProfile, updateSettings } from "@/lib/finance.functions";
 import { formatCurrency } from "@/lib/finance-calc";
-import {
-  CURRENCY_OPTIONS,
-  DATE_FORMAT_OPTIONS,
-  WEEK_START_OPTIONS,
-} from "@/lib/labels";
+import { CURRENCY_OPTIONS, DATE_FORMAT_OPTIONS, WEEK_START_OPTIONS } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -109,7 +105,11 @@ function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="settings-name">Full name</Label>
-            <Input id="settings-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input
+              id="settings-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label>Email</Label>
@@ -131,10 +131,14 @@ function SettingsPage() {
             <div className="space-y-2">
               <Label>Currency</Label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger aria-label="Currency"><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Currency">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {CURRENCY_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -142,10 +146,14 @@ function SettingsPage() {
             <div className="space-y-2">
               <Label>Date format</Label>
               <Select value={dateFormat} onValueChange={setDateFormat}>
-                <SelectTrigger aria-label="Date format"><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Date format">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {DATE_FORMAT_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -153,10 +161,14 @@ function SettingsPage() {
             <div className="space-y-2">
               <Label>Week starts on</Label>
               <Select value={weekStart} onValueChange={setWeekStart}>
-                <SelectTrigger aria-label="Week start"><SelectValue /></SelectTrigger>
+                <SelectTrigger aria-label="Week start">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {WEEK_START_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -176,8 +188,8 @@ function SettingsPage() {
           </div>
           <Separator />
           <p className="text-sm text-muted-foreground">
-            Preview: {formatCurrency(1234567.5, currency)} · Indian grouping and compact
-            lakh/crore summaries apply to INR.
+            Preview: {formatCurrency(1234567.5, currency)} · Indian grouping and compact lakh/crore
+            summaries apply to INR.
           </p>
           <Button disabled={saveSettings.isPending} onClick={() => saveSettings.mutate()}>
             Save preferences
@@ -186,8 +198,8 @@ function SettingsPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        Signed in with {boot.profile.email}. Week start ({s.week_start}) and date format
-        apply across every page.
+        Signed in with {boot.profile.email}. Week start ({s.week_start}) and date format apply
+        across every page.
       </p>
     </div>
   );

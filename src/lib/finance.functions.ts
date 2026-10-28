@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   addDaysISO,
@@ -182,7 +183,11 @@ export const getDashboard = createServerFn({ method: "POST" })
         .eq("payment_status", "paid")
         .order("payment_date", { ascending: false })
         .limit(8),
-      supabase.from("user_settings").select("monthly_budget").eq("user_id", context.userId).single(),
+      supabase
+        .from("user_settings")
+        .select("monthly_budget")
+        .eq("user_id", context.userId)
+        .single(),
     ]);
 
     if (settings.error) throw new Error(settings.error.message);
@@ -442,7 +447,7 @@ export const deleteIncome = createServerFn({ method: "POST" })
 /**
  * Materialise due recurring expenses. Idempotent: the generated copies hit the
  * dedupe unique index (user, title, due_date, amount for recurring rows) and
- * .onConflictDoNothing() skips anything already generated — no check-then-insert.
+ * ignore duplicates skips anything already generated — no check-then-insert.
  */
 async function materializeRecurring(supabase: SupabaseClient, userId: string) {
   const today = todayISO();
@@ -455,8 +460,8 @@ async function materializeRecurring(supabase: SupabaseClient, userId: string) {
 
   for (const s of series) {
     let due: string | null = s.due_date;
-    const clones: object[] = [];
-    while (due && (!s.recurrence_end_date || due <= s.recurrence_end_date)) {
+    const clones: TablesInsert<"expenses">[] = [];
+    while (due && due <= today && (!s.recurrence_end_date || due <= s.recurrence_end_date)) {
       clones.push({
         user_id: userId,
         category_id: s.category_id,
@@ -471,14 +476,15 @@ async function materializeRecurring(supabase: SupabaseClient, userId: string) {
       due = nextRecurrenceDate(due, s.recurrence as Recurrence);
     }
     if (clones.length > 0) {
-      const { error: insertError } = await supabase
-        .from("expenses")
-        .insert(clones)
-        .onConflictDoNothing();
-      if (insertError) console.warn("[recurring generation]", insertError.message);
+      for (const clone of clones) {
+        const { error: insertError } = await supabase.from("expenses").insert(clone);
+        if (insertError && insertError.code !== "23505") {
+          console.warn("[recurring generation]", insertError.message);
+        }
+      }
     }
-    const lastGenerated = clones.length > 0 ? (clones[clones.length - 1] as { due_date: string }) : null;
-    const nextDue = lastGenerated
+    const lastGenerated = clones.length > 0 ? clones[clones.length - 1] : null;
+    const nextDue = lastGenerated?.due_date
       ? nextRecurrenceDate(lastGenerated.due_date, s.recurrence as Recurrence)
       : null;
     if (nextDue && nextDue !== s.due_date) {
@@ -499,7 +505,7 @@ export const listExpenses = createServerFn({ method: "POST" })
     const [expRes, catRes] = await Promise.all([
       supabase
         .from("expenses")
-        .select("*, category:expense_categories(name, color)")
+        .select("*, category:expense_categories!expenses_category_id_fkey(name, color)")
         .order("due_date", { ascending: false }),
       supabase
         .from("expense_categories")
@@ -532,14 +538,17 @@ export const saveExpense = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const paymentDate =
-      data.payment_status === "paid" ? (data.payment_date ?? todayISO()) : (data.payment_date ?? null);
+      data.payment_status === "paid"
+        ? (data.payment_date ?? todayISO())
+        : (data.payment_date ?? null);
     const payload = {
       title: data.title,
       category_id: data.category_id,
       amount: data.amount,
       due_date: data.due_date,
       recurrence: data.recurrence,
-      recurrence_end_date: data.recurrence === "one_time" ? null : (data.recurrence_end_date ?? null),
+      recurrence_end_date:
+        data.recurrence === "one_time" ? null : (data.recurrence_end_date ?? null),
       payment_status: data.payment_status,
       payment_date: paymentDate,
       payment_method: data.payment_method ?? null,
@@ -700,10 +709,10 @@ export const saveLoan = createServerFn({ method: "POST" })
         amount: data.emi_amount,
         status: "unpaid" as const,
       }));
-      const { error: emiError } = await supabase
-        .from("emi_payments")
-        .insert(rows)
-        .onConflictDoNothing();
+      const { error: emiError } = await supabase.from("emi_payments").upsert(rows, {
+        onConflict: "loan_id,installment_number",
+        ignoreDuplicates: true,
+      });
       if (emiError) throw new Error(emiError.message);
       await supabase
         .from("loans")
@@ -798,7 +807,7 @@ export const markEmiPaid = createServerFn({ method: "POST" })
       .eq("id", emi.loan_id)
       .single();
     if (loan) {
-      const patch: Record<string, number> = {};
+      const patch: TablesUpdate<"loans"> = {};
       if (loan.outstanding_principal != null) {
         patch.outstanding_principal = Math.max(
           0,
@@ -840,9 +849,11 @@ export const unmarkEmiPaid = createServerFn({ method: "POST" })
       .eq("id", emi.loan_id)
       .single();
     if (loan) {
-      const patch: Record<string, number> = {};
+      const patch: TablesUpdate<"loans"> = {};
       if (loan.outstanding_principal != null) {
-        patch.outstanding_principal = roundMoney(Number(loan.outstanding_principal) + Number(emi.amount));
+        patch.outstanding_principal = roundMoney(
+          Number(loan.outstanding_principal) + Number(emi.amount),
+        );
       }
       if (loan.remaining_installments != null) {
         patch.remaining_installments = loan.remaining_installments + 1;
@@ -875,7 +886,9 @@ export const getReports = createServerFn({ method: "POST" })
         .gte("received_date", `${startISO.slice(0, 7)}-01`),
       supabase
         .from("expenses")
-        .select("amount, category_id, payment_date, category:expense_categories(name)")
+        .select(
+          "amount, category_id, payment_date, category:expense_categories!expenses_category_id_fkey(name)",
+        )
         .eq("payment_status", "paid")
         .gte("payment_date", `${startISO.slice(0, 7)}-01`),
       supabase.from("investments").select("current_value, principal_amount, status"),

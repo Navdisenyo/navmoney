@@ -10,12 +10,14 @@ import {
   investmentsQueryOptions,
   type Investment,
 } from "@/lib/finance-queries";
+import { deleteInvestment, saveInvestment, investmentSchema } from "@/lib/finance.functions";
 import {
-  deleteInvestment,
-  saveInvestment,
-  investmentSchema,
-} from "@/lib/finance.functions";
-import { formatCompact, formatCurrency, formatDate, projectValue, todayISO } from "@/lib/finance-calc";
+  formatCompact,
+  formatCurrency,
+  formatDate,
+  projectValue,
+  todayISO,
+} from "@/lib/finance-calc";
 import {
   COMPOUNDING_OPTIONS,
   INVESTMENT_TYPE_LABELS,
@@ -59,9 +61,15 @@ export const Route = createFileRoute("/_authenticated/investments")({
   head: () => ({
     meta: [
       { title: "Investments — Artha" },
-      { name: "description", content: "Track deposits, funds and holdings with return projections." },
+      {
+        name: "description",
+        content: "Track deposits, funds and holdings with return projections.",
+      },
       { property: "og:title", content: "Investments — Artha" },
-      { property: "og:description", content: "Track deposits, funds and holdings with return projections." },
+      {
+        property: "og:description",
+        content: "Track deposits, funds and holdings with return projections.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -256,7 +264,12 @@ function InvestmentsPage() {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => openEdit(inv)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Edit"
+                      onClick={() => openEdit(inv)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -274,7 +287,9 @@ function InvestmentsPage() {
                 <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <div>
                     <dt className="text-xs text-muted-foreground">Principal</dt>
-                    <dd className="tabular-nums font-medium">{fmt(Number(inv.principal_amount))}</dd>
+                    <dd className="tabular-nums font-medium">
+                      {fmt(Number(inv.principal_amount))}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Current value</dt>
@@ -290,11 +305,15 @@ function InvestmentsPage() {
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Payout</dt>
-                    <dd className="font-medium capitalize">{inv.payout_frequency.replace(/_/g, " ")}</dd>
+                    <dd className="font-medium capitalize">
+                      {inv.payout_frequency.replace(/_/g, " ")}
+                    </dd>
                   </div>
                   <div className="col-span-2">
                     <dt className="text-xs text-muted-foreground">
-                      {hypothetical ? "Projection (hypothetical)" : `Projection — next ${months} month${months === 1 ? "" : "s"}`}
+                      {hypothetical
+                        ? "Projection (hypothetical)"
+                        : `Projection — next ${months} month${months === 1 ? "" : "s"}`}
                     </dt>
                     <dd className="tabular-nums font-medium text-income">
                       {fmt(projection.value)}
@@ -306,7 +325,9 @@ function InvestmentsPage() {
                     </dd>
                   </div>
                 </dl>
-                {inv.notes ? <p className="mt-3 text-xs text-muted-foreground">{inv.notes}</p> : null}
+                {inv.notes ? (
+                  <p className="mt-3 text-xs text-muted-foreground">{inv.notes}</p>
+                ) : null}
               </div>
             );
           })}
@@ -321,44 +342,86 @@ function InvestmentsPage() {
           <form onSubmit={submit} className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="inv-name">Name</Label>
-              <Input id="inv-name" required value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder="e.g. HDFC FD — 2 years" />
+              <Input
+                id="inv-name"
+                required
+                value={form.name}
+                onChange={(e) => set("name")(e.target.value)}
+                placeholder="e.g. HDFC FD — 2 years"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Type</Label>
                 <Select value={form.type} onValueChange={set("type")}>
-                  <SelectTrigger aria-label="Investment type"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Investment type">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {INVESTMENT_TYPE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="inv-institution">Institution</Label>
-                <Input id="inv-institution" value={form.institution} onChange={(e) => set("institution")(e.target.value)} placeholder="Optional" />
+                <Input
+                  id="inv-institution"
+                  value={form.institution}
+                  onChange={(e) => set("institution")(e.target.value)}
+                  placeholder="Optional"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="inv-principal">Principal (₹)</Label>
-                <Input id="inv-principal" required type="number" min="0" step="0.01" value={form.principal_amount} onChange={(e) => set("principal_amount")(e.target.value)} />
+                <Input
+                  id="inv-principal"
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.principal_amount}
+                  onChange={(e) => set("principal_amount")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="inv-current">Current value</Label>
-                <Input id="inv-current" type="number" min="0" step="0.01" value={form.current_value} onChange={(e) => set("current_value")(e.target.value)} placeholder="Optional" />
+                <Input
+                  id="inv-current"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.current_value}
+                  onChange={(e) => set("current_value")(e.target.value)}
+                  placeholder="Optional"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="inv-rate">Annual rate (%)</Label>
-                <Input id="inv-rate" required type="number" min="0" max="100" step="0.01" value={form.annual_rate} onChange={(e) => set("annual_rate")(e.target.value)} />
+                <Input
+                  id="inv-rate"
+                  required
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.annual_rate}
+                  onChange={(e) => set("annual_rate")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Rate type</Label>
                 <Select value={form.rate_type} onValueChange={set("rate_type")}>
-                  <SelectTrigger aria-label="Rate type"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Rate type">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="fixed">Fixed</SelectItem>
                     <SelectItem value="variable">Variable / market-linked</SelectItem>
@@ -369,21 +432,36 @@ function InvestmentsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="inv-start">Start date</Label>
-                <Input id="inv-start" required type="date" value={form.start_date} onChange={(e) => set("start_date")(e.target.value)} />
+                <Input
+                  id="inv-start"
+                  required
+                  type="date"
+                  value={form.start_date}
+                  onChange={(e) => set("start_date")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="inv-maturity">Maturity date</Label>
-                <Input id="inv-maturity" type="date" value={form.maturity_date} onChange={(e) => set("maturity_date")(e.target.value)} />
+                <Input
+                  id="inv-maturity"
+                  type="date"
+                  value={form.maturity_date}
+                  onChange={(e) => set("maturity_date")(e.target.value)}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Compounding</Label>
                 <Select value={form.compounding_method} onValueChange={set("compounding_method")}>
-                  <SelectTrigger aria-label="Compounding method"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Compounding method">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {COMPOUNDING_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -391,10 +469,14 @@ function InvestmentsPage() {
               <div className="space-y-2">
                 <Label>Payout</Label>
                 <Select value={form.payout_frequency} onValueChange={set("payout_frequency")}>
-                  <SelectTrigger aria-label="Payout frequency"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Payout frequency">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {PAYOUT_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -404,7 +486,9 @@ function InvestmentsPage() {
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={set("status")}>
-                  <SelectTrigger aria-label="Status"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Status">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="matured">Matured</SelectItem>
@@ -414,7 +498,12 @@ function InvestmentsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="inv-notes">Notes</Label>
-                <Input id="inv-notes" value={form.notes} onChange={(e) => set("notes")(e.target.value)} placeholder="Optional" />
+                <Input
+                  id="inv-notes"
+                  value={form.notes}
+                  onChange={(e) => set("notes")(e.target.value)}
+                  placeholder="Optional"
+                />
               </div>
             </div>
             <DialogFooter>

@@ -2,19 +2,9 @@
 // Every derived money value must go through roundMoney/sumMoney so rounding
 // stays consistent (half-up, 2 decimals) across dashboard, reports and pages.
 
-export type Recurrence =
-  | "one_time"
-  | "weekly"
-  | "monthly"
-  | "quarterly"
-  | "annually";
+export type Recurrence = "one_time" | "weekly" | "monthly" | "quarterly" | "annually";
 
-export type CompoundingMethod =
-  | "simple"
-  | "monthly"
-  | "quarterly"
-  | "half_yearly"
-  | "annually";
+export type CompoundingMethod = "simple" | "monthly" | "quarterly" | "half_yearly" | "annually";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -101,10 +91,7 @@ export function monthRange(month: string): { start: string; end: string } {
   };
 }
 
-export function nextRecurrenceDate(
-  iso: string,
-  recurrence: Recurrence,
-): string | null {
+export function nextRecurrenceDate(iso: string, recurrence: Recurrence): string | null {
   switch (recurrence) {
     case "weekly":
       return addDaysISO(iso, 7);
@@ -172,10 +159,7 @@ export function projectValue(opts: {
  * Savings rate = net savings / actual income x 100.
  * Returns null when actual income is 0 (the rate is undefined, not 0).
  */
-export function savingsRate(
-  netSavings: number,
-  actualIncome: number,
-): number | null {
+export function savingsRate(netSavings: number, actualIncome: number): number | null {
   if (!(actualIncome > 0)) return null;
   return roundMoney((netSavings / actualIncome) * 100);
 }
@@ -208,7 +192,7 @@ export function formatCompact(amount: number, currency = "INR"): string {
   const abs = Math.abs(amount);
   const sign = amount < 0 ? "-" : "";
   if (currency === "INR") {
-    const symbol = CURRENCY_SYMBOLS.INR;
+    const symbol = CURRENCY_SYMBOLS["INR"];
     if (abs >= 1e7) return `${sign}${symbol}${(abs / 1e7).toFixed(2)} Cr`;
     if (abs >= 1e5) return `${sign}${symbol}${(abs / 1e5).toFixed(2)} L`;
     return formatCurrency(amount, currency);
@@ -259,7 +243,9 @@ export function buildEmiSchedule(
   const firstIsCurrentMonth = p.d <= monthlyDueDay;
   const dates: string[] = [];
   for (let i = 0; i < n; i++) {
-    dates.push(addMonthsClamped(isoFromParts(p.y, p.m, monthlyDueDay), firstIsCurrentMonth ? i : i + 1));
+    dates.push(
+      addMonthsClamped(isoFromParts(p.y, p.m, monthlyDueDay), firstIsCurrentMonth ? i : i + 1),
+    );
   }
   return dates;
 }

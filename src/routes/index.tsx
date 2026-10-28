@@ -24,8 +24,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Artha — Track investments, income & expenses" },
       {
         property: "og:description",
-        content:
-          "Investments, income, expenses, loans and EMI in one calm, premium dashboard.",
+        content: "Investments, income, expenses, loans and EMI in one calm, premium dashboard.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -88,8 +87,8 @@ function Index() {
             <span className="text-primary">every rupee of it</span>.
           </h1>
           <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-            Artha brings your investments, income, expenses and loan EMIs into one calm
-            dashboard — with honest forecasts, not guesses.
+            Artha brings your investments, income, expenses and loan EMIs into one calm dashboard —
+            with honest forecasts, not guesses.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Button size="lg" asChild>
@@ -131,8 +130,8 @@ function Index() {
               See the whole picture in minutes
             </h2>
             <p className="mt-2 max-w-lg text-muted-foreground">
-              Savings rate, monthly cash flow, upcoming EMIs and category breakdowns —
-              calculated consistently and clearly labelled.
+              Savings rate, monthly cash flow, upcoming EMIs and category breakdowns — calculated
+              consistently and clearly labelled.
             </p>
           </div>
           <Button size="lg" asChild>

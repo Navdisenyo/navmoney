@@ -10,21 +10,21 @@ import {
   listLoans,
 } from "./finance.functions";
 
-export type Profile = Tables<"profiles">["Row"];
-export type Settings = Tables<"user_settings">["Row"];
-export type Category = Tables<"expense_categories">["Row"];
-export type Investment = Tables<"investments">["Row"];
-export type Loan = Tables<"loans">["Row"];
+export type Profile = Tables<"profiles">;
+export type Settings = Tables<"user_settings">;
+export type Category = Tables<"expense_categories">;
+export type Investment = Tables<"investments">;
+export type Loan = Tables<"loans">;
 
-export type IncomeRow = Tables<"income_transactions">["Row"] & {
+export type IncomeRow = Tables<"income_transactions"> & {
   investment: { name: string } | null;
 };
 
-export type ExpenseRow = Tables<"expenses">["Row"] & {
+export type ExpenseRow = Tables<"expenses"> & {
   category: { name: string; color: string | null } | null;
 };
 
-export type EmiRow = Tables<"emi_payments">["Row"] & {
+export type EmiRow = Tables<"emi_payments"> & {
   loan: { name: string } | null;
 };
 

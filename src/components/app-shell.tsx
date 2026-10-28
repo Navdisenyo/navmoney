@@ -51,13 +51,7 @@ function Logo() {
   );
 }
 
-function NavLinks({
-  pathname,
-  onNavigate,
-}: {
-  pathname: string;
-  onNavigate?: () => void;
-}) {
+function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
     <>
       {NAV_ITEMS.map((item) => {
@@ -205,7 +199,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Settings className="size-4" /> Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={handleSignOut}
+              >
                 <LogOut className="size-4" /> Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>

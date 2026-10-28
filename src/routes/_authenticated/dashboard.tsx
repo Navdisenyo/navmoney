@@ -16,18 +16,19 @@ import {
   PageHeader,
   PageSkeleton,
   RouteError,
+  RouteNotFound,
   StatCard,
 } from "@/components/finance-ui";
 import { cn } from "@/lib/utils";
 import { Suspense } from "react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    month:
-      typeof search.month === "string" && /^\d{4}-\d{2}$/.test(search.month)
-        ? search.month
-        : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { month?: string } => {
+    const rawMonth = search["month"];
+    return typeof rawMonth === "string" && /^\d{4}-\d{2}$/.test(rawMonth)
+      ? { month: rawMonth }
+      : {};
+  },
   loaderDeps: ({ search: { month } }) => ({ month }),
   loader: ({ context, deps }) => {
     const month = deps.month ?? currentMonthKey();
@@ -39,7 +40,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — Artha" },
-      { name: "description", content: "Your monthly cash flow, savings rate and upcoming bills and EMIs." },
+      {
+        name: "description",
+        content: "Your monthly cash flow, savings rate and upcoming bills and EMIs.",
+      },
       { property: "og:title", content: "Dashboard — Artha" },
       { property: "og:description", content: "Monthly cash flow, savings rate and upcoming EMIs." },
       { property: "og:type", content: "website" },
@@ -69,7 +73,12 @@ function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description="Actuals for the month, plus what's coming in the next 30 days."
-        action={<MonthNav month={month} onChange={(m) => navigate({ to: "/dashboard", search: { month: m } })} />}
+        action={
+          <MonthNav
+            month={month}
+            onChange={(m) => navigate({ to: "/dashboard", search: { month: m } })}
+          />
+        }
       />
 
       {d.overdueTotal > 0 ? (

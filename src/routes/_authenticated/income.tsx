@@ -12,8 +12,13 @@ import {
   type IncomeRow,
 } from "@/lib/finance-queries";
 import { deleteIncome, incomeSchema, saveIncome } from "@/lib/finance.functions";
-import { formatDate, todayISO } from "@/lib/finance-calc";
-import { INCOME_CATEGORY_LABELS, INCOME_CATEGORY_OPTIONS, RECURRENCE_LABELS, RECURRENCE_OPTIONS } from "@/lib/labels";
+import { formatCurrency, formatDate, todayISO } from "@/lib/finance-calc";
+import {
+  INCOME_CATEGORY_LABELS,
+  INCOME_CATEGORY_OPTIONS,
+  RECURRENCE_LABELS,
+  RECURRENCE_OPTIONS,
+} from "@/lib/labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,7 +57,10 @@ export const Route = createFileRoute("/_authenticated/income")({
   head: () => ({
     meta: [
       { title: "Income — Artha" },
-      { name: "description", content: "Salary, rental, freelance and investment income — received and expected." },
+      {
+        name: "description",
+        content: "Salary, rental, freelance and investment income — received and expected.",
+      },
       { property: "og:title", content: "Income — Artha" },
       { property: "og:description", content: "All income streams, received and expected." },
       { property: "og:type", content: "website" },
@@ -216,7 +224,10 @@ function IncomePage() {
       />
 
       {data.income.length === 0 ? (
-        <EmptyState title="No income recorded yet" hint="Add your salary, rent or freelance earnings." />
+        <EmptyState
+          title="No income recorded yet"
+          hint="Add your salary, rent or freelance earnings."
+        />
       ) : (
         <ul className="divide-y rounded-xl border bg-card">
           {data.income.map((row) => (
@@ -224,8 +235,10 @@ function IncomePage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-sm font-medium">{row.title}</p>
-                  <Badge variant={row.status === "received" ? "default" : "outline"}
-                    className={row.status === "received" ? "bg-income text-income-foreground" : ""}>
+                  <Badge
+                    variant={row.status === "received" ? "default" : "outline"}
+                    className={row.status === "received" ? "bg-income text-income-foreground" : ""}
+                  >
                     {row.status === "received" ? "Received" : "Expected"}
                   </Badge>
                   {row.recurrence !== "one_time" ? (
@@ -284,34 +297,62 @@ function IncomePage() {
           <form onSubmit={submit} className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="inc-title">Title</Label>
-              <Input id="inc-title" required value={form.title} onChange={(e) => set("title")(e.target.value)} placeholder="e.g. October salary" />
+              <Input
+                id="inc-title"
+                required
+                value={form.title}
+                onChange={(e) => set("title")(e.target.value)}
+                placeholder="e.g. October salary"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
                 <Select value={form.category} onValueChange={set("category")}>
-                  <SelectTrigger aria-label="Income category"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Income category">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {INCOME_CATEGORY_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="inc-amount">Amount (₹)</Label>
-                <Input id="inc-amount" required type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => set("amount")(e.target.value)} />
+                <Input
+                  id="inc-amount"
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => set("amount")(e.target.value)}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="inc-date">{form.status === "expected" ? "Expected on" : "Received on"}</Label>
-                <Input id="inc-date" required type="date" value={form.received_date} onChange={(e) => set("received_date")(e.target.value)} />
+                <Label htmlFor="inc-date">
+                  {form.status === "expected" ? "Expected on" : "Received on"}
+                </Label>
+                <Input
+                  id="inc-date"
+                  required
+                  type="date"
+                  value={form.received_date}
+                  onChange={(e) => set("received_date")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select value={form.status} onValueChange={set("status")}>
-                  <SelectTrigger aria-label="Income status"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Income status">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="received">Received</SelectItem>
                     <SelectItem value="expected">Expected</SelectItem>
@@ -323,10 +364,14 @@ function IncomePage() {
               <div className="space-y-2">
                 <Label>Recurrence</Label>
                 <Select value={form.recurrence} onValueChange={set("recurrence")}>
-                  <SelectTrigger aria-label="Recurrence"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Recurrence">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {RECURRENCE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -335,11 +380,15 @@ function IncomePage() {
                 <div className="space-y-2">
                   <Label>From investment</Label>
                   <Select value={form.investment_id} onValueChange={set("investment_id")}>
-                    <SelectTrigger aria-label="Linked investment"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Linked investment">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Not linked</SelectItem>
                       {investmentsData.investments.map((inv) => (
-                        <SelectItem key={inv.id} value={inv.id}>{inv.name}</SelectItem>
+                        <SelectItem key={inv.id} value={inv.id}>
+                          {inv.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -348,7 +397,13 @@ function IncomePage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="inc-notes">Notes</Label>
-              <Textarea id="inc-notes" rows={2} value={form.notes} onChange={(e) => set("notes")(e.target.value)} placeholder="Optional" />
+              <Textarea
+                id="inc-notes"
+                rows={2}
+                value={form.notes}
+                onChange={(e) => set("notes")(e.target.value)}
+                placeholder="Optional"
+              />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>

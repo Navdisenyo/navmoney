@@ -22,8 +22,7 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-const card =
-  "w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm";
+const card = "w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm";
 
 function AuthPage() {
   const navigate = useNavigate();
@@ -38,7 +37,7 @@ function AuthPage() {
   useEffect(() => {
     let cancelled = false;
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!cancelled && user) navigate({ to: "/dashboard", replace: true });
+      if (!cancelled && user) navigate({ to: "/dashboard", replace: true, search: {} });
     });
     return () => {
       cancelled = true;
@@ -54,7 +53,7 @@ function AuthPage() {
         toast.error(error.message);
         return;
       }
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ to: "/dashboard", replace: true, search: {} });
     } finally {
       setBusy(false);
     }
@@ -81,7 +80,7 @@ function AuthPage() {
         setAwaitingConfirmation(true);
         return;
       }
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ to: "/dashboard", replace: true, search: {} });
     } finally {
       setBusy(false);
     }
@@ -90,6 +89,20 @@ function AuthPage() {
   async function handleOAuth(provider: "google" | "lovable") {
     setOauthBusy(provider);
     try {
+      if (provider === "google") {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `${window.location.origin}/dashboard`,
+          },
+        });
+        if (error) {
+          toast.error(error.message);
+          return;
+        }
+        return;
+      }
+
       const result = await lovable.auth.signInWithOAuth(provider, {
         redirect_uri: window.location.origin,
       });
@@ -98,7 +111,9 @@ function AuthPage() {
         return;
       }
       if (result.redirected) return; // browser is heading to the provider
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ to: "/dashboard", replace: true, search: {} });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to initiate sign-in");
     } finally {
       setOauthBusy(null);
     }
@@ -113,8 +128,8 @@ function AuthPage() {
           </span>
           <h1 className="mt-4 font-display text-xl font-semibold">Check your email</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            We sent a confirmation link to <strong>{email}</strong>. Click it to activate
-            your account, then sign in.
+            We sent a confirmation link to <strong>{email}</strong>. Click it to activate your
+            account, then sign in.
           </p>
           <Button className="mt-6 w-full" variant="outline" asChild>
             <Link to="/auth">Back to sign in</Link>

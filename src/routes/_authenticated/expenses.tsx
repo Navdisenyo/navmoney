@@ -18,7 +18,7 @@ import {
   saveCategory,
   saveExpense,
 } from "@/lib/finance.functions";
-import { formatDate, todayISO } from "@/lib/finance-calc";
+import { formatCurrency, formatDate, todayISO } from "@/lib/finance-calc";
 import {
   CATEGORY_COLORS,
   PAYMENT_STATUS_LABELS,
@@ -61,7 +61,10 @@ export const Route = createFileRoute("/_authenticated/expenses")({
   head: () => ({
     meta: [
       { title: "Expenses — Artha" },
-      { name: "description", content: "Bills and spending with categories, recurrence and paid tracking." },
+      {
+        name: "description",
+        content: "Bills and spending with categories, recurrence and paid tracking.",
+      },
       { property: "og:title", content: "Expenses — Artha" },
       { property: "og:description", content: "Bills and spending with categories and recurrence." },
       { property: "og:type", content: "website" },
@@ -243,7 +246,10 @@ function ExpensesPage() {
       />
 
       {data.expenses.length === 0 ? (
-        <EmptyState title="No expenses yet" hint="Add a bill or a recurring expense to get started." />
+        <EmptyState
+          title="No expenses yet"
+          hint="Add a bill or a recurring expense to get started."
+        />
       ) : (
         <ul className="divide-y rounded-xl border bg-card">
           {data.expenses.map((row) => {
@@ -295,7 +301,12 @@ function ExpensesPage() {
                       <BadgeCheck className="size-4" /> Mark paid
                     </Button>
                   ) : null}
-                  <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => openEdit(row)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Edit"
+                    onClick={() => openEdit(row)}
+                  >
                     <Pencil className="size-4" />
                   </Button>
                   <Button
@@ -356,37 +367,65 @@ function ExpensesPage() {
           <form onSubmit={submit} className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="exp-title">Title</Label>
-              <Input id="exp-title" required value={form.title} onChange={(e) => set("title")(e.target.value)} placeholder="e.g. Electricity bill" />
+              <Input
+                id="exp-title"
+                required
+                value={form.title}
+                onChange={(e) => set("title")(e.target.value)}
+                placeholder="e.g. Electricity bill"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Category</Label>
                 <Select value={form.category_id} onValueChange={set("category_id")}>
-                  <SelectTrigger aria-label="Expense category"><SelectValue placeholder="Pick one" /></SelectTrigger>
+                  <SelectTrigger aria-label="Expense category">
+                    <SelectValue placeholder="Pick one" />
+                  </SelectTrigger>
                   <SelectContent>
                     {data.categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="exp-amount">Amount (₹)</Label>
-                <Input id="exp-amount" required type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => set("amount")(e.target.value)} />
+                <Input
+                  id="exp-amount"
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => set("amount")(e.target.value)}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="exp-due">Due date</Label>
-                <Input id="exp-due" required type="date" value={form.due_date} onChange={(e) => set("due_date")(e.target.value)} />
+                <Input
+                  id="exp-due"
+                  required
+                  type="date"
+                  value={form.due_date}
+                  onChange={(e) => set("due_date")(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Recurrence</Label>
                 <Select value={form.recurrence} onValueChange={set("recurrence")}>
-                  <SelectTrigger aria-label="Recurrence"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Recurrence">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {RECURRENCE_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -409,7 +448,9 @@ function ExpensesPage() {
               <div className="space-y-2">
                 <Label>Payment status</Label>
                 <Select value={form.payment_status} onValueChange={set("payment_status")}>
-                  <SelectTrigger aria-label="Payment status"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Payment status">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unpaid">Unpaid</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
@@ -420,13 +461,23 @@ function ExpensesPage() {
               {form.payment_status === "paid" ? (
                 <div className="space-y-2">
                   <Label htmlFor="exp-paid">Paid on</Label>
-                  <Input id="exp-paid" type="date" value={form.payment_date} onChange={(e) => set("payment_date")(e.target.value)} />
+                  <Input
+                    id="exp-paid"
+                    type="date"
+                    value={form.payment_date}
+                    onChange={(e) => set("payment_date")(e.target.value)}
+                  />
                 </div>
               ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="exp-notes">Notes</Label>
-              <Input id="exp-notes" value={form.notes} onChange={(e) => set("notes")(e.target.value)} placeholder="Optional" />
+              <Input
+                id="exp-notes"
+                value={form.notes}
+                onChange={(e) => set("notes")(e.target.value)}
+                placeholder="Optional"
+              />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
@@ -449,7 +500,13 @@ function ExpensesPage() {
           <div className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="cat-name">Name</Label>
-              <Input id="cat-name" required value={catName} onChange={(e) => setCatName(e.target.value)} placeholder="e.g. Groceries" />
+              <Input
+                id="cat-name"
+                required
+                value={catName}
+                onChange={(e) => setCatName(e.target.value)}
+                placeholder="e.g. Groceries"
+              />
             </div>
             <div className="space-y-2">
               <Label>Colour</Label>

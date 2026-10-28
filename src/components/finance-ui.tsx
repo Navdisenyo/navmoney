@@ -110,15 +110,21 @@ export function PageSkeleton() {
 }
 
 /** Loader errors: retry re-runs the loader (reset() alone would not). */
-export function RouteError({ error, reset }: { error: Error; reset: () => void }) {
+export function RouteError({ error, reset }: { error: unknown; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
     console.error(error);
   }, [error]);
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "An unexpected error occurred";
   return (
     <div className="rounded-xl border bg-card p-10 text-center">
       <p className="font-display font-semibold">This page didn't load</p>
-      <p className="mt-1 text-sm text-muted-foreground">{error.message}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{message}</p>
       <Button
         className="mt-4"
         onClick={() => {
@@ -136,7 +142,9 @@ export function RouteNotFound() {
   return (
     <div className="rounded-xl border bg-card p-10 text-center">
       <p className="font-display font-semibold">Nothing here</p>
-      <p className="mt-1 text-sm text-muted-foreground">This record doesn't exist (or is not yours).</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        This record doesn't exist (or is not yours).
+      </p>
     </div>
   );
 }

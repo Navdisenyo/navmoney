@@ -15,10 +15,20 @@ import {
   YAxis,
 } from "recharts";
 
-import { bootstrapQueryOptions, reportsQueryOptions, type ReportsData } from "@/lib/finance-queries";
+import {
+  bootstrapQueryOptions,
+  reportsQueryOptions,
+  type ReportsData,
+} from "@/lib/finance-queries";
 import { formatCompact, formatCurrency } from "@/lib/finance-calc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState, PageHeader, PageSkeleton, RouteError, StatCard } from "@/components/finance-ui";
+import {
+  EmptyState,
+  PageHeader,
+  PageSkeleton,
+  RouteError,
+  StatCard,
+} from "@/components/finance-ui";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/reports")({
@@ -30,7 +40,10 @@ export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({
     meta: [
       { title: "Reports — Artha" },
-      { name: "description", content: "Monthly cash flow, category breakdown and savings insights." },
+      {
+        name: "description",
+        content: "Monthly cash flow, category breakdown and savings insights.",
+      },
       { property: "og:title", content: "Reports — Artha" },
       { property: "og:description", content: "Monthly cash flow and category breakdown." },
       { property: "og:type", content: "website" },
@@ -47,7 +60,13 @@ export const Route = createFileRoute("/_authenticated/reports")({
   component: ReportsPage,
 });
 
-const PIE_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
+const PIE_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 function monthShort(m: string): string {
   return new Date(`${m}-01T00:00:00`).toLocaleDateString("en", { month: "short" });
@@ -75,7 +94,8 @@ function ReportsInner() {
 
   const topCategories = d.categoryBreakdown.slice(0, 6);
   const othersTotal = d.categoryBreakdown.slice(6).reduce((acc, c) => acc + c.total, 0);
-  const pieData = othersTotal > 0 ? [...topCategories, { name: "Other", total: othersTotal }] : topCategories;
+  const pieData =
+    othersTotal > 0 ? [...topCategories, { name: "Other", total: othersTotal }] : topCategories;
 
   return (
     <div className="space-y-8">
@@ -85,8 +105,17 @@ function ReportsInner() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Income" value={formatCompact(d.totalIncome, currency)} tone="income" sub={fmt(d.totalIncome)} />
-        <StatCard label="Expenses" value={formatCompact(d.totalExpenses, currency)} sub={fmt(d.totalExpenses)} />
+        <StatCard
+          label="Income"
+          value={formatCompact(d.totalIncome, currency)}
+          tone="income"
+          sub={fmt(d.totalIncome)}
+        />
+        <StatCard
+          label="Expenses"
+          value={formatCompact(d.totalExpenses, currency)}
+          sub={fmt(d.totalExpenses)}
+        />
         <StatCard
           label="Net savings"
           value={formatCompact(d.netSavings, currency)}
@@ -96,7 +125,11 @@ function ReportsInner() {
         <StatCard
           label="Savings rate"
           value={d.savingsRate == null ? "—" : `${d.savingsRate.toFixed(1)}%`}
-          sub={d.savingsRate == null ? "Unavailable — no received income" : "Net savings ÷ actual income"}
+          sub={
+            d.savingsRate == null
+              ? "Unavailable — no received income"
+              : "Net savings ÷ actual income"
+          }
         />
       </div>
 
@@ -106,12 +139,20 @@ function ReportsInner() {
         </CardHeader>
         <CardContent>
           {d.totalIncome === 0 && d.totalExpenses === 0 ? (
-            <EmptyState title="No activity in the last 12 months" hint="Record income and expenses to see the trend." />
+            <EmptyState
+              title="No activity in the last 12 months"
+              hint="Record income and expenses to see the trend."
+            />
           ) : (
             <ResponsiveContainer width="100%" height={320}>
               <BarChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickLine={false} axisLine={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <YAxis
                   tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
                   tickLine={false}
@@ -130,7 +171,12 @@ function ReportsInner() {
                 />
                 <Legend />
                 <Bar dataKey="income" name="Income" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expenses" name="Expenses" fill="var(--chart-5)" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="expenses"
+                  name="Expenses"
+                  fill="var(--chart-5)"
+                  radius={[4, 4, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -190,7 +236,9 @@ function ReportsInner() {
                   return (
                     <li key={row.category}>
                       <div className="mb-1 flex items-center justify-between text-sm">
-                        <span className="font-medium capitalize">{row.category.replace(/_/g, " ")}</span>
+                        <span className="font-medium capitalize">
+                          {row.category.replace(/_/g, " ")}
+                        </span>
                         <span className="tabular-nums text-muted-foreground">{fmt(row.total)}</span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-muted">
