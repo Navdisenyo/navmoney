@@ -31,3 +31,8 @@ package-lock.json
 *.njsproj
 *.sln
 *.sw?
+
+# Keep environment credentials outside version control
+.env
+.env.*
+!.env.example
