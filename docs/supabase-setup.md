@@ -15,6 +15,8 @@ In Netlify, open this project's Environment variables settings and add these var
 
 Make these available to builds and Functions. Redeploy after changing them; browser configuration is embedded during the build. Keep browser and server settings on the same Supabase project.
 
+The Vite configuration also accepts `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` as build-time fallbacks when the matching `VITE_` names are absent. Only the two public settings are passed to browser code. A missing URL or publishable key now stops the build instead of publishing a site that fails when authentication starts. An already published browser bundle does not change when environment variables are updated; a fresh deployment is required.
+
 For local development, copy `.env.example` to `.env` and fill it in locally. Environment files are ignored by Git. The obsolete environment file for the previous Supabase project was removed from the repository.
 
 Supabase must already contain the app's tables, owner policies, and signup provisioning trigger. Updating configuration does not migrate accounts or financial records between projects. In Supabase Authentication URL Configuration, allow the deployed app's URL and any intended preview callback URLs for authentication redirects.
