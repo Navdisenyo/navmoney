@@ -36,21 +36,57 @@ export const getBootstrap = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const [profileRes, settingsRes, categoriesRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("id", userId).single(),
-      supabase.from("user_settings").select("*").eq("user_id", userId).single(),
+    let [profileRes, settingsRes, categoriesRes] = await Promise.all([
+      supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
       supabase
         .from("expense_categories")
         .select("*")
         .order("is_default", { ascending: false })
         .order("name"),
     ]);
+
+    // If profile or settings are missing (e.g. user was created before triggers were setup), auto-provision
+    if (!profileRes.data || !settingsRes.data) {
+      await supabase.rpc("ensure_current_user").catch(() => {});
+
+      [profileRes, settingsRes, categoriesRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+        supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
+        supabase
+          .from("expense_categories")
+          .select("*")
+          .order("is_default", { ascending: false })
+          .order("name"),
+      ]);
+    }
+
     if (profileRes.error) throw new Error(profileRes.error.message);
     if (settingsRes.error) throw new Error(settingsRes.error.message);
     if (categoriesRes.error) throw new Error(categoriesRes.error.message);
+
+    const profile = profileRes.data ?? {
+      id: userId,
+      email: "",
+      full_name: "Account",
+      avatar_url: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const settings = settingsRes.data ?? {
+      user_id: userId,
+      currency: "INR",
+      date_format: "DD/MM/YYYY" as const,
+      week_start: "MON" as const,
+      monthly_budget: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
     return {
-      profile: profileRes.data,
-      settings: settingsRes.data,
+      profile,
+      settings,
       categories: categoriesRes.data ?? [],
     };
   });
