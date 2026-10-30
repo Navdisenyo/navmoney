@@ -175,12 +175,13 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export function formatCurrency(amount: number, currency = "INR"): string {
   const locale = currency === "INR" ? "en-IN" : "en-US";
+  const hasDecimals = Math.abs(amount % 1) > 0.001;
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-      minimumFractionDigits: 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
     }).format(amount);
   } catch {
     return `${CURRENCY_SYMBOLS[currency] ?? ""}${amount.toLocaleString("en-IN")}`;
