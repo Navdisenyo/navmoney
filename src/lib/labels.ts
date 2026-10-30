@@ -31,11 +31,11 @@ export const COMPOUNDING_OPTIONS: { value: CompoundingMethod; label: string }[] 
 ];
 
 export const PAYOUT_OPTIONS = [
-  { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "annually", label: "Annually" },
-  { value: "at_maturity", label: "At maturity" },
-  { value: "reinvested", label: "Reinvested" },
+  { value: "monthly", label: "Monthly (Auto-credits to Income every month)" },
+  { value: "quarterly", label: "Quarterly (Auto-credits every 3 months)" },
+  { value: "annually", label: "Annually (Auto-credits yearly)" },
+  { value: "at_maturity", label: "At maturity (Paid at expiry)" },
+  { value: "reinvested", label: "Reinvested / Compounded (No regular payout)" },
   { value: "variable", label: "Variable" },
 ];
 

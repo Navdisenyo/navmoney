@@ -7,6 +7,7 @@ import {
   addDaysISO,
   addMonthsClamped,
   buildEmiSchedule,
+  calculateInvestmentEarning,
   monthKey,
   monthRange,
   nextRecurrenceDate,
@@ -48,7 +49,9 @@ export const getBootstrap = createServerFn({ method: "POST" })
 
     // If profile or settings are missing (e.g. user was created before triggers were setup), auto-provision
     if (!profileRes.data || !settingsRes.data) {
-      await supabase.rpc("ensure_current_user").catch(() => {});
+      await (supabase.rpc as unknown as (fn: string) => Promise<unknown>)(
+        "ensure_current_user",
+      ).catch(() => {});
 
       [profileRes, settingsRes, categoriesRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
@@ -139,7 +142,11 @@ export const getDashboard = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) }).parse(data))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+    await Promise.all([
+      materializeInvestmentIncome(supabase, userId),
+      materializeRecurringIncome(supabase, userId),
+    ]);
     const today = todayISO();
     const { start, end } = monthRange(data.month);
     const horizon = addDaysISO(today, 30);
@@ -315,9 +322,211 @@ export const getDashboard = createServerFn({ method: "POST" })
 
 // ---------- investments ----------
 
+/**
+ * Materialise investment interest income transactions.
+ * For any active investment with regular payout (monthly, quarterly, annually):
+ * generates received/expected income transactions without requiring manual entry.
+ * Idempotent: indexed by (investment_id, received_date) and respects unique received dedupe index.
+ */
+export async function materializeInvestmentIncome(supabase: SupabaseClient, userId: string) {
+  const today = todayISO();
+  const horizon = addDaysISO(today, 35);
+  const lookbackStart = addMonthsClamped(`${today.slice(0, 7)}-01`, -12);
+
+  // 1. Fetch investments for this user that have interest rate and payout frequency
+  const { data: investments, error: invError } = await supabase
+    .from("investments")
+    .select("*")
+    .eq("user_id", userId)
+    .in("payout_frequency", ["monthly", "quarterly", "annually"])
+    .gt("principal_amount", 0)
+    .gt("annual_rate", 0);
+
+  if (invError || !investments || investments.length === 0) return;
+
+  // 2. Fetch existing income transactions linked to these investments
+  const investmentIds = investments.map((i) => i.id);
+  const { data: existingTxs, error: txError } = await supabase
+    .from("income_transactions")
+    .select("id, investment_id, received_date, status, amount")
+    .eq("user_id", userId)
+    .in("investment_id", investmentIds);
+
+  if (txError) {
+    console.warn("[investment income: fetch existing]", txError.message);
+    return;
+  }
+
+  const existingMap = new Map<string, { id: string; status: string; amount: number }>();
+  for (const tx of existingTxs ?? []) {
+    if (tx.investment_id && tx.received_date) {
+      existingMap.set(`${tx.investment_id}:${tx.received_date}`, {
+        id: tx.id,
+        status: tx.status,
+        amount: Number(tx.amount),
+      });
+    }
+  }
+
+  for (const inv of investments) {
+    if (inv.status === "closed") {
+      // Clean up future expected rows if investment is closed
+      await supabase
+        .from("income_transactions")
+        .delete()
+        .eq("investment_id", inv.id)
+        .eq("status", "expected");
+      continue;
+    }
+
+    const dismissedMatch = (inv.notes ?? "").match(/<!--\s*dismissed:\s*([^\s>]+)\s*-->/);
+    const dismissedDates = new Set(
+      dismissedMatch && dismissedMatch[1] ? dismissedMatch[1].split(",") : [],
+    );
+
+    const interval =
+      inv.payout_frequency === "monthly" ? 1 : inv.payout_frequency === "quarterly" ? 3 : 12;
+    const recurrence =
+      inv.payout_frequency === "quarterly"
+        ? "quarterly"
+        : inv.payout_frequency === "annually"
+          ? "annually"
+          : "monthly";
+
+    const annualInterest = roundMoney(
+      Number(inv.principal_amount) * (Number(inv.annual_rate) / 100),
+    );
+    const periodicAmount =
+      inv.payout_frequency === "monthly"
+        ? roundMoney(annualInterest / 12)
+        : inv.payout_frequency === "quarterly"
+          ? roundMoney(annualInterest / 4)
+          : annualInterest;
+
+    if (periodicAmount <= 0) continue;
+
+    let step = 1;
+    let payoutDate = addMonthsClamped(inv.start_date, step * interval);
+
+    // Skip past payouts before lookback window
+    while (payoutDate < lookbackStart) {
+      step++;
+      payoutDate = addMonthsClamped(inv.start_date, step * interval);
+    }
+
+    while (payoutDate <= horizon && (!inv.maturity_date || payoutDate <= inv.maturity_date)) {
+      if (dismissedDates.has(payoutDate)) {
+        step++;
+        payoutDate = addMonthsClamped(inv.start_date, step * interval);
+        continue;
+      }
+
+      const key = `${inv.id}:${payoutDate}`;
+      const existing = existingMap.get(key);
+      const isPastOrToday = payoutDate <= today;
+      const targetStatus = isPastOrToday ? "received" : "expected";
+
+      if (existing) {
+        // DO NOT overwrite! The user has full permission to edit status, amount, or notes.
+        // If the user marked it expected/pending because payment was not received, respect their decision!
+        step++;
+        payoutDate = addMonthsClamped(inv.start_date, step * interval);
+        continue;
+      } else {
+        const newRow: TablesInsert<"income_transactions"> = {
+          user_id: userId,
+          investment_id: inv.id,
+          title: `${inv.name} — Interest Payout`,
+          category: "investment_income",
+          amount: periodicAmount,
+          received_date: payoutDate,
+          status: targetStatus,
+          recurrence: recurrence,
+          notes: `Auto-calculated interest from ${inv.name} (${Number(inv.annual_rate)}% p.a., ${inv.payout_frequency} payout)`,
+        };
+
+        const { data: inserted, error: insErr } = await supabase
+          .from("income_transactions")
+          .insert(newRow)
+          .select("id, status, amount")
+          .maybeSingle();
+
+        if (insErr && insErr.code !== "23505") {
+          console.warn("[investment income insert]", insErr.message);
+        } else if (inserted) {
+          existingMap.set(key, {
+            id: inserted.id,
+            status: inserted.status,
+            amount: Number(inserted.amount),
+          });
+        }
+      }
+
+      step++;
+      payoutDate = addMonthsClamped(inv.start_date, step * interval);
+    }
+  }
+}
+
+/**
+ * Materialise recurring income transactions (e.g. monthly salary, rental).
+ * Idempotent: advances recurring income series and inserts clones up to today.
+ */
+export async function materializeRecurringIncome(supabase: SupabaseClient, userId: string) {
+  const today = todayISO();
+  const { data: series, error } = await supabase
+    .from("income_transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .neq("recurrence", "one_time")
+    .is("investment_id", null)
+    .lte("received_date", today);
+
+  if (error || !series) return;
+
+  for (const s of series) {
+    let due: string | null = s.received_date;
+    const clones: TablesInsert<"income_transactions">[] = [];
+    while (due && due <= today) {
+      clones.push({
+        user_id: userId,
+        investment_id: null,
+        title: s.title,
+        category: s.category,
+        amount: s.amount,
+        received_date: due,
+        recurrence: s.recurrence,
+        notes: s.notes,
+        status: "received",
+      });
+      due = nextRecurrenceDate(due, s.recurrence as Recurrence);
+    }
+    if (clones.length > 0) {
+      for (const clone of clones) {
+        const { error: insertError } = await supabase.from("income_transactions").insert(clone);
+        if (insertError && insertError.code !== "23505") {
+          console.warn("[recurring income generation]", insertError.message);
+        }
+      }
+    }
+    const lastGenerated = clones.length > 0 ? clones[clones.length - 1] : null;
+    const nextDue = lastGenerated?.received_date
+      ? nextRecurrenceDate(lastGenerated.received_date, s.recurrence as Recurrence)
+      : null;
+    if (nextDue && nextDue !== s.received_date) {
+      const { error: updateError } = await supabase
+        .from("income_transactions")
+        .update({ received_date: nextDue })
+        .eq("id", s.id);
+      if (updateError) console.warn("[recurring income advance]", updateError.message);
+    }
+  }
+}
+
 export const listInvestments = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await materializeInvestmentIncome(context.supabase, context.userId);
     const { data, error } = await context.supabase
       .from("investments")
       .select("*")
@@ -382,16 +591,31 @@ export const saveInvestment = createServerFn({ method: "POST" })
       notes: data.notes ?? null,
     };
     if (data.id) {
+      // Preserve existing dismissed tags if updating
+      const { data: existingInv } = await supabase
+        .from("investments")
+        .select("notes")
+        .eq("id", data.id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const dismissedTag = (existingInv?.notes ?? "").match(/<!--\s*dismissed:.*?-->/)?.[0];
+      if (dismissedTag) {
+        payload.notes = payload.notes ? `${payload.notes} ${dismissedTag}` : dismissedTag;
+      }
+
       const { error } = await supabase
         .from("investments")
         .update(payload)
         .eq("id", data.id)
         .eq("user_id", userId);
       if (error) throw new Error(error.message);
+      await materializeInvestmentIncome(supabase, userId);
       return { ok: true as const };
     }
     const { error } = await supabase.from("investments").insert({ ...payload, user_id: userId });
     if (error) throw new Error(error.message);
+    await materializeInvestmentIncome(supabase, userId);
     return { ok: true as const };
   });
 
@@ -399,6 +623,13 @@ export const deleteInvestment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
+    // Delete any pending expected income transactions linked to this deleted investment
+    await context.supabase
+      .from("income_transactions")
+      .delete()
+      .eq("investment_id", data.id)
+      .eq("status", "expected");
+
     const { error } = await context.supabase
       .from("investments")
       .delete()
@@ -413,7 +644,12 @@ export const deleteInvestment = createServerFn({ method: "POST" })
 export const listIncome = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
+    const { supabase, userId } = context;
+    await Promise.all([
+      materializeInvestmentIncome(supabase, userId),
+      materializeRecurringIncome(supabase, userId),
+    ]);
+    const { data, error } = await supabase
       .from("income_transactions")
       .select("*, investment:investments(name)")
       .order("received_date", { ascending: false });
@@ -469,11 +705,47 @@ export const deleteIncome = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const { supabase, userId } = context;
+
+    // Check if this transaction is linked to an investment
+    const { data: tx } = await supabase
+      .from("income_transactions")
+      .select("id, investment_id, received_date")
+      .eq("id", data.id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (tx?.investment_id && tx.received_date) {
+      // Record this payout date as dismissed on the investment so auto-materialization won't re-insert it
+      const { data: inv } = await supabase
+        .from("investments")
+        .select("id, notes")
+        .eq("id", tx.investment_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (inv) {
+        const match = (inv.notes ?? "").match(/<!--\s*dismissed:\s*([^\s>]+)\s*-->/);
+        const dates = new Set(match && match[1] ? match[1].split(",") : []);
+        dates.add(tx.received_date);
+        const cleanNotes = (inv.notes ?? "").replace(/<!--\s*dismissed:.*?-->/g, "").trim();
+        const newNotes = cleanNotes
+          ? `${cleanNotes} <!-- dismissed:${Array.from(dates).join(",")} -->`
+          : `<!-- dismissed:${Array.from(dates).join(",")} -->`;
+
+        await supabase
+          .from("investments")
+          .update({ notes: newNotes })
+          .eq("id", inv.id)
+          .eq("user_id", userId);
+      }
+    }
+
+    const { error } = await supabase
       .from("income_transactions")
       .delete()
       .eq("id", data.id)
-      .eq("user_id", context.userId);
+      .eq("user_id", userId);
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
@@ -906,7 +1178,11 @@ export const unmarkEmiPaid = createServerFn({ method: "POST" })
 export const getReports = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+    await Promise.all([
+      materializeInvestmentIncome(supabase, userId),
+      materializeRecurringIncome(supabase, userId),
+    ]);
     const today = todayISO();
     const startISO = addMonthsClamped(`${today.slice(0, 7)}-01`, -11);
     const months: string[] = [];

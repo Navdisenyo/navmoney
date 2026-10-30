@@ -249,3 +249,96 @@ export function buildEmiSchedule(
   }
   return dates;
 }
+
+export interface InvestmentEarningDetails {
+  monthlyAmount: number;
+  periodicAmount: number;
+  periodLabel: string;
+  annualAmount: number;
+  payoutIntervalMonths: number | null;
+}
+
+/**
+ * Calculate interest earnings for an investment based on principal, annual rate,
+ * payout frequency (monthly, quarterly, annually, reinvested, etc.) and compounding method.
+ */
+export function calculateInvestmentEarning(opts: {
+  principal: number;
+  annualRatePct: number;
+  payoutFrequency: string;
+  compoundingMethod?: CompoundingMethod;
+}): InvestmentEarningDetails {
+  const p = Math.max(0, opts.principal || 0);
+  const r = Math.max(0, opts.annualRatePct || 0);
+  const freq = opts.payoutFrequency;
+  const compounding = opts.compoundingMethod ?? "annually";
+
+  if (p === 0 || r === 0) {
+    return {
+      monthlyAmount: 0,
+      periodicAmount: 0,
+      periodLabel: "per month",
+      annualAmount: 0,
+      payoutIntervalMonths: null,
+    };
+  }
+
+  const annualInterest = roundMoney(p * (r / 100));
+
+  if (freq === "monthly") {
+    const monthly = roundMoney(annualInterest / 12);
+    return {
+      monthlyAmount: monthly,
+      periodicAmount: monthly,
+      periodLabel: "per month",
+      annualAmount: annualInterest,
+      payoutIntervalMonths: 1,
+    };
+  }
+
+  if (freq === "quarterly") {
+    const quarterly = roundMoney(annualInterest / 4);
+    const monthly = roundMoney(annualInterest / 12);
+    return {
+      monthlyAmount: monthly,
+      periodicAmount: quarterly,
+      periodLabel: "per quarter",
+      annualAmount: annualInterest,
+      payoutIntervalMonths: 3,
+    };
+  }
+
+  if (freq === "annually") {
+    const monthly = roundMoney(annualInterest / 12);
+    return {
+      monthlyAmount: monthly,
+      periodicAmount: annualInterest,
+      periodLabel: "per year",
+      annualAmount: annualInterest,
+      payoutIntervalMonths: 12,
+    };
+  }
+
+  if (freq === "at_maturity") {
+    const monthlyRate = monthlyEquivalentRate(r, compounding);
+    const monthly = roundMoney(p * monthlyRate);
+    return {
+      monthlyAmount: monthly,
+      periodicAmount: annualInterest,
+      periodLabel: "at maturity",
+      annualAmount: annualInterest,
+      payoutIntervalMonths: null,
+    };
+  }
+
+  // "reinvested" or "variable" or other
+  const monthlyRate = monthlyEquivalentRate(r, compounding);
+  const monthly = roundMoney(p * monthlyRate);
+  return {
+    monthlyAmount: monthly,
+    periodicAmount: monthly,
+    periodLabel: freq === "reinvested" ? "accumulated/mo" : "per month",
+    annualAmount: annualInterest,
+    payoutIntervalMonths: null,
+  };
+}

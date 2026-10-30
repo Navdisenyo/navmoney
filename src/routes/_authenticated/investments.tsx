@@ -12,11 +12,14 @@ import {
 } from "@/lib/finance-queries";
 import { deleteInvestment, saveInvestment, investmentSchema } from "@/lib/finance.functions";
 import {
+  calculateInvestmentEarning,
   formatCompact,
   formatCurrency,
   formatDate,
   projectValue,
+  sumMoney,
   todayISO,
+  type CompoundingMethod,
 } from "@/lib/finance-calc";
 import {
   COMPOUNDING_OPTIONS,
@@ -50,6 +53,7 @@ import {
   PageSkeleton,
   RouteError,
   RouteNotFound,
+  StatCard,
 } from "@/components/finance-ui";
 
 export const Route = createFileRoute("/_authenticated/investments")({
@@ -107,12 +111,13 @@ const blankForm: FormState = {
   start_date: todayISO(),
   maturity_date: "",
   compounding_method: "annually",
-  payout_frequency: "reinvested",
+  payout_frequency: "monthly",
   status: "active",
   notes: "",
 };
 
 function toForm(inv: Investment): FormState {
+  const cleanNotes = (inv.notes ?? "").replace(/<!--\s*dismissed:.*?-->/g, "").trim();
   return {
     name: inv.name,
     type: inv.type,
@@ -126,7 +131,7 @@ function toForm(inv: Investment): FormState {
     compounding_method: inv.compounding_method,
     payout_frequency: inv.payout_frequency,
     status: inv.status,
-    notes: inv.notes ?? "",
+    notes: cleanNotes,
   };
 }
 
@@ -152,6 +157,14 @@ function InvestmentsPage() {
   const [editing, setEditing] = useState<Investment | null>(null);
   const [form, setForm] = useState<FormState>(blankForm);
 
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["investments"] }),
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      queryClient.invalidateQueries({ queryKey: ["income"] }),
+      queryClient.invalidateQueries({ queryKey: ["reports"] }),
+    ]);
+
   const save = useMutation({
     mutationFn: (values: typeof form) => {
       const num = (s: string) => (s.trim() === "" ? null : Number(s));
@@ -175,8 +188,7 @@ function InvestmentsPage() {
       });
     },
     onSuccess: async (_res, _vars) => {
-      await queryClient.invalidateQueries({ queryKey: ["investments"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await invalidate();
       toast.success(editing ? "Investment updated" : "Investment added");
       setDialogOpen(false);
     },
@@ -186,8 +198,7 @@ function InvestmentsPage() {
   const remove = useMutation({
     mutationFn: (id: string) => deleteFn({ data: { id } }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["investments"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await invalidate();
       toast.success("Investment removed");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -216,17 +227,82 @@ function InvestmentsPage() {
 
   const set = (key: keyof FormState) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
 
+  const totalPrincipal = sumMoney(
+    data.investments
+      .filter((i) => i.status !== "closed")
+      .map((i) => Number(i.principal_amount || 0)),
+  );
+  const totalValue = sumMoney(
+    data.investments
+      .filter((i) => i.status !== "closed")
+      .map((i) => Number(i.current_value ?? i.principal_amount ?? 0)),
+  );
+  const activeInvestments = data.investments.filter((i) => i.status === "active");
+  const monthlyInterestTotal = sumMoney(
+    activeInvestments.map((inv) => {
+      const calc = calculateInvestmentEarning({
+        principal: Number(inv.principal_amount || 0),
+        annualRatePct: Number(inv.annual_rate || 0),
+        payoutFrequency: inv.payout_frequency,
+        compoundingMethod: inv.compounding_method as CompoundingMethod,
+      });
+      return calc.monthlyAmount;
+    }),
+  );
+  const annualInterestTotal = sumMoney(
+    activeInvestments.map((inv) => {
+      const calc = calculateInvestmentEarning({
+        principal: Number(inv.principal_amount || 0),
+        annualRatePct: Number(inv.annual_rate || 0),
+        payoutFrequency: inv.payout_frequency,
+        compoundingMethod: inv.compounding_method as CompoundingMethod,
+      });
+      return calc.annualAmount;
+    }),
+  );
+
+  const earningPreview = calculateInvestmentEarning({
+    principal: Number(form.principal_amount) || 0,
+    annualRatePct: Number(form.annual_rate) || 0,
+    payoutFrequency: form.payout_frequency,
+    compoundingMethod: form.compounding_method as CompoundingMethod,
+  });
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Investments"
-        description="Fixed deposits, funds, holdings — with equivalent monthly returns and projections."
+        description="Fixed deposits, funds, holdings — with automatic monthly interest calculation and income tracking."
         action={
           <Button onClick={openAdd}>
             <Plus className="size-4" /> Add investment
           </Button>
         }
       />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Total Invested"
+          value={fmt(totalPrincipal)}
+          sub="Principal in active holdings"
+        />
+        <StatCard
+          label="Portfolio Value"
+          value={formatCompact(totalValue, currency)}
+          sub="Current market & deposit value"
+        />
+        <StatCard
+          label="Monthly Interest / ROI"
+          value={fmt(monthlyInterestTotal)}
+          tone="income"
+          sub="Auto-credited to Monthly Income"
+        />
+        <StatCard
+          label="Annual Interest Return"
+          value={fmt(annualInterestTotal)}
+          sub="Projected annual returns"
+        />
+      </div>
 
       {data.investments.length === 0 ? (
         <EmptyState
@@ -246,6 +322,12 @@ function InvestmentsPage() {
               monthlyContribution: inv.type === "rd" ? Number(inv.principal_amount) : 0,
             });
             const hypothetical = MARKET_LINKED_TYPES.has(inv.type);
+            const earning = calculateInvestmentEarning({
+              principal: Number(inv.principal_amount),
+              annualRatePct: Number(inv.annual_rate),
+              payoutFrequency: inv.payout_frequency,
+              compoundingMethod: inv.compounding_method as CompoundingMethod,
+            });
             return (
               <div key={inv.id} className="rounded-xl border bg-card p-5">
                 <div className="flex items-start justify-between gap-2">
@@ -284,6 +366,37 @@ function InvestmentsPage() {
                     </Button>
                   </div>
                 </div>
+
+                <div className="mt-4 rounded-lg border border-income/20 bg-income/5 p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        Interest Return ({earning.periodLabel})
+                      </p>
+                      <p className="font-display text-lg font-semibold text-income tabular-nums">
+                        {fmt(earning.periodicAmount)}
+                        {earning.payoutIntervalMonths && earning.payoutIntervalMonths > 1 ? (
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            (~{fmt(earning.monthlyAmount)} / mo)
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                    {earning.payoutIntervalMonths ? (
+                      <Badge className="bg-income text-income-foreground text-xs font-normal">
+                        Auto-credited to Income
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-xs font-normal text-muted-foreground"
+                      >
+                        Compounded
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
                 <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <div>
                     <dt className="text-xs text-muted-foreground">Principal</dt>
@@ -309,6 +422,16 @@ function InvestmentsPage() {
                       {inv.payout_frequency.replace(/_/g, " ")}
                     </dd>
                   </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Expiry / Maturity</dt>
+                    <dd className="font-medium">
+                      {inv.maturity_date ? formatDate(inv.maturity_date, df) : "Open-ended"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Start date</dt>
+                    <dd className="font-medium">{formatDate(inv.start_date, df)}</dd>
+                  </div>
                   <div className="col-span-2">
                     <dt className="text-xs text-muted-foreground">
                       {hypothetical
@@ -325,8 +448,10 @@ function InvestmentsPage() {
                     </dd>
                   </div>
                 </dl>
-                {inv.notes ? (
-                  <p className="mt-3 text-xs text-muted-foreground">{inv.notes}</p>
+                {inv.notes?.replace(/<!--\s*dismissed:.*?-->/g, "").trim() ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {inv.notes.replace(/<!--\s*dismissed:.*?-->/g, "").trim()}
+                  </p>
                 ) : null}
               </div>
             );
@@ -506,6 +631,36 @@ function InvestmentsPage() {
                 />
               </div>
             </div>
+            {Number(form.principal_amount) > 0 && Number(form.annual_rate) > 0 ? (
+              <div className="rounded-lg border border-income/30 bg-income/5 p-3.5 text-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Estimated Monthly Earning
+                  </span>
+                  <span className="font-display font-semibold text-income tabular-nums">
+                    {fmt(earningPreview.monthlyAmount)} / month
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Periodic Payout ({form.payout_frequency.replace(/_/g, " ")}):</span>
+                  <span className="font-medium tabular-nums text-foreground">
+                    {fmt(earningPreview.periodicAmount)} {earningPreview.periodLabel}
+                  </span>
+                </div>
+                {earningPreview.payoutIntervalMonths ? (
+                  <p className="text-xs text-income pt-1 border-t border-income/10 font-medium">
+                    ✓ Auto-credits each month to your "Income received" and "Income from Invest"
+                    without any manual input.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground pt-1 border-t border-muted/20">
+                    ℹ️ Reinvested: Interest compounds into value. Choose "Monthly" or "Quarterly" if
+                    you receive periodic cash in hand.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel

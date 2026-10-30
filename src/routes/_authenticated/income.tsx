@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, BadgeCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, BadgeCheck, RotateCcw } from "lucide-react";
 
 import {
   bootstrapQueryOptions,
@@ -12,7 +12,7 @@ import {
   type IncomeRow,
 } from "@/lib/finance-queries";
 import { deleteIncome, incomeSchema, saveIncome } from "@/lib/finance.functions";
-import { formatCurrency, formatDate, todayISO } from "@/lib/finance-calc";
+import { formatCurrency, formatDate, sumMoney, todayISO } from "@/lib/finance-calc";
 import {
   INCOME_CATEGORY_LABELS,
   INCOME_CATEGORY_OPTIONS,
@@ -44,6 +44,7 @@ import {
   PageSkeleton,
   RouteError,
   RouteNotFound,
+  StatCard,
 } from "@/components/finance-ui";
 import { cn } from "@/lib/utils";
 
@@ -157,8 +158,8 @@ function IncomePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const markReceived = useMutation({
-    mutationFn: (row: IncomeRow) =>
+  const toggleStatus = useMutation({
+    mutationFn: ({ row, newStatus }: { row: IncomeRow; newStatus: "received" | "expected" }) =>
       saveFn({
         data: {
           id: row.id,
@@ -166,15 +167,17 @@ function IncomePage() {
           category: row.category as never,
           amount: Number(row.amount),
           received_date: row.received_date,
-          status: "received" as const,
+          status: newStatus,
           recurrence: row.recurrence as never,
           investment_id: row.investment_id ?? null,
           notes: row.notes ?? null,
         },
       }),
-    onSuccess: async () => {
+    onSuccess: async (_res, vars) => {
       await invalidate();
-      toast.success("Marked as received");
+      toast.success(
+        vars.newStatus === "received" ? "Marked as received" : "Marked as pending / not received",
+      );
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -211,11 +214,41 @@ function IncomePage() {
 
   const set = (key: keyof FormState) => (value: string) => setForm((f) => ({ ...f, [key]: value }));
 
+  const [filter, setFilter] = useState<"all" | "investments" | "other">("all");
+
+  const curMonth = todayISO().slice(0, 7);
+  const totalReceivedThisMonth = sumMoney(
+    data.income
+      .filter((r) => r.status === "received" && r.received_date.startsWith(curMonth))
+      .map((r) => Number(r.amount)),
+  );
+  const investmentIncomeThisMonth = sumMoney(
+    data.income
+      .filter(
+        (r) =>
+          r.status === "received" &&
+          r.category === "investment_income" &&
+          r.received_date.startsWith(curMonth),
+      )
+      .map((r) => Number(r.amount)),
+  );
+  const totalExpectedThisMonth = sumMoney(
+    data.income
+      .filter((r) => r.status === "expected" && r.received_date.startsWith(curMonth))
+      .map((r) => Number(r.amount)),
+  );
+
+  const filteredIncome = data.income.filter((row) => {
+    if (filter === "investments") return row.category === "investment_income";
+    if (filter === "other") return row.category !== "investment_income";
+    return true;
+  });
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Income"
-        description="Expected amounts are forecasts — only received income counts toward savings."
+        description="Expected amounts are forecasts — received income tracks your actual cash flow and investment earnings."
         action={
           <Button onClick={openAdd}>
             <Plus className="size-4" /> Add income
@@ -223,24 +256,97 @@ function IncomePage() {
         }
       />
 
-      {data.income.length === 0 ? (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          label="Income received (This month)"
+          value={fmt(totalReceivedThisMonth)}
+          tone="income"
+          sub="Actual received cash & interest"
+        />
+        <StatCard
+          label="Income from Investments"
+          value={fmt(investmentIncomeThisMonth)}
+          tone="income"
+          sub="Auto-tracked interest & ROI earnings"
+        />
+        <StatCard
+          label="Expected this month"
+          value={fmt(totalExpectedThisMonth)}
+          sub="Forecasted receivables due this month"
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant={filter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilter("all")}
+        >
+          All Income ({data.income.length})
+        </Button>
+        <Button
+          variant={filter === "investments" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilter("investments")}
+        >
+          Income from Investments (
+          {data.income.filter((r) => r.category === "investment_income").length})
+        </Button>
+        <Button
+          variant={filter === "other" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilter("other")}
+        >
+          Salary & Other ({data.income.filter((r) => r.category !== "investment_income").length})
+        </Button>
+      </div>
+
+      {filteredIncome.length === 0 ? (
         <EmptyState
-          title="No income recorded yet"
-          hint="Add your salary, rent or freelance earnings."
+          title={
+            filter === "investments"
+              ? "No investment income found"
+              : filter === "other"
+                ? "No other income recorded"
+                : "No income recorded yet"
+          }
+          hint={
+            filter === "investments"
+              ? "Active investments with regular payout (monthly or quarterly) will auto-generate income here."
+              : "Add your salary, rent or freelance earnings."
+          }
         />
       ) : (
         <ul className="divide-y rounded-xl border bg-card">
-          {data.income.map((row) => (
+          {filteredIncome.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center gap-3 p-4">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="truncate text-sm font-medium">{row.title}</p>
                   <Badge
                     variant={row.status === "received" ? "default" : "outline"}
-                    className={row.status === "received" ? "bg-income text-income-foreground" : ""}
+                    className={
+                      row.status === "received"
+                        ? "bg-income text-income-foreground"
+                        : row.received_date < todayISO()
+                          ? "border-amber-500/40 text-amber-500 bg-amber-500/10"
+                          : ""
+                    }
                   >
-                    {row.status === "received" ? "Received" : "Expected"}
+                    {row.status === "received"
+                      ? "Received"
+                      : row.received_date < todayISO()
+                        ? "Pending / Not received"
+                        : "Expected"}
                   </Badge>
+                  {row.category === "investment_income" ? (
+                    <Badge
+                      variant="outline"
+                      className="border-income/40 bg-income/10 text-income text-xs"
+                    >
+                      From Investment
+                    </Badge>
+                  ) : null}
                   {row.recurrence !== "one_time" ? (
                     <Badge variant="secondary">{RECURRENCE_LABELS[row.recurrence]}</Badge>
                   ) : null}
@@ -256,12 +362,24 @@ function IncomePage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={markReceived.isPending}
-                    onClick={() => markReceived.mutate(row)}
+                    className="text-xs text-income hover:text-income"
+                    disabled={toggleStatus.isPending}
+                    onClick={() => toggleStatus.mutate({ row, newStatus: "received" })}
                   >
-                    <BadgeCheck className="size-4" /> Mark received
+                    <BadgeCheck className="size-4 mr-1" /> Mark received
                   </Button>
-                ) : null}
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    title="Mark not received / pending"
+                    disabled={toggleStatus.isPending}
+                    onClick={() => toggleStatus.mutate({ row, newStatus: "expected" })}
+                  >
+                    <RotateCcw className="size-3.5 mr-1" /> Mark not received
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => openEdit(row)}>
                   <Pencil className="size-4" />
                 </Button>

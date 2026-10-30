@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addMonthsClamped,
   buildEmiSchedule,
+  calculateInvestmentEarning,
   formatCompact,
   formatCurrency,
   monthlyEquivalentRate,
@@ -124,5 +125,63 @@ describe("dates", () => {
     ]);
     expect(buildEmiSchedule("2026-10-01", 5, 2)).toEqual(["2026-10-05", "2026-11-05"]);
     expect(buildEmiSchedule("2026-01-31", 30, 2)).toEqual([]);
+  });
+});
+
+describe("calculateInvestmentEarning", () => {
+  it("calculates monthly interest accurately for monthly payout", () => {
+    // 100,000 at 12% p.a. monthly payout = 1,000 / mo
+    const res = calculateInvestmentEarning({
+      principal: 100000,
+      annualRatePct: 12,
+      payoutFrequency: "monthly",
+    });
+    expect(res.monthlyAmount).toBe(1000);
+    expect(res.periodicAmount).toBe(1000);
+    expect(res.annualAmount).toBe(12000);
+    expect(res.payoutIntervalMonths).toBe(1);
+  });
+
+  it("calculates quarterly interest and equivalent monthly for quarterly payout", () => {
+    // 100,000 at 12% p.a. quarterly payout = 3,000 / quarter, 1,000 / mo
+    const res = calculateInvestmentEarning({
+      principal: 100000,
+      annualRatePct: 12,
+      payoutFrequency: "quarterly",
+    });
+    expect(res.periodicAmount).toBe(3000);
+    expect(res.monthlyAmount).toBe(1000);
+    expect(res.annualAmount).toBe(12000);
+    expect(res.payoutIntervalMonths).toBe(3);
+  });
+
+  it("calculates annual interest payout and monthly equivalent", () => {
+    // 100,000 at 8.5% p.a. annual payout = 8,500 / yr, ~708.33 / mo
+    const res = calculateInvestmentEarning({
+      principal: 100000,
+      annualRatePct: 8.5,
+      payoutFrequency: "annually",
+    });
+    expect(res.periodicAmount).toBe(8500);
+    expect(res.monthlyAmount).toBe(708.33);
+    expect(res.annualAmount).toBe(8500);
+    expect(res.payoutIntervalMonths).toBe(12);
+  });
+
+  it("handles zero principal or zero rate gracefully", () => {
+    const res1 = calculateInvestmentEarning({
+      principal: 0,
+      annualRatePct: 10,
+      payoutFrequency: "monthly",
+    });
+    expect(res1.monthlyAmount).toBe(0);
+    expect(res1.payoutIntervalMonths).toBeNull();
+
+    const res2 = calculateInvestmentEarning({
+      principal: 50000,
+      annualRatePct: 0,
+      payoutFrequency: "monthly",
+    });
+    expect(res2.monthlyAmount).toBe(0);
   });
 });
