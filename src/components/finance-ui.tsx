@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useRouter, type ErrorComponentProps } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { addMonthsClamped } from "@/lib/finance-calc";
