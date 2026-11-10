@@ -32,6 +32,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState<string | null>(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
 
   // Already signed in? Straight to the dashboard.
   useEffect(() => {
@@ -86,23 +87,27 @@ function AuthPage() {
     }
   }
 
+  async function handleResendConfirmation() {
+    setResendBusy(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success("Confirmation email sent. Check your inbox and spam folder.");
+    } finally {
+      setResendBusy(false);
+    }
+  }
+
   async function handleOAuth(provider: "google" | "lovable") {
     setOauthBusy(provider);
     try {
-      if (provider === "google") {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: `${window.location.origin}/dashboard`,
-          },
-        });
-        if (error) {
-          toast.error(error.message);
-          return;
-        }
-        return;
-      }
-
       const result = await lovable.auth.signInWithOAuth(provider, {
         redirect_uri: window.location.origin,
       });
@@ -131,7 +136,16 @@ function AuthPage() {
             We sent a confirmation link to <strong>{email}</strong>. Click it to activate your
             account, then sign in.
           </p>
-          <Button className="mt-6 w-full" variant="outline" asChild>
+          <Button
+            className="mt-6 w-full"
+            variant="outline"
+            disabled={resendBusy}
+            onClick={handleResendConfirmation}
+          >
+            {resendBusy && <Loader2 className="size-4 animate-spin" />}
+            Resend confirmation email
+          </Button>
+          <Button className="mt-3 w-full" variant="ghost" asChild>
             <Link to="/auth">Back to sign in</Link>
           </Button>
         </div>
