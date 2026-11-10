@@ -20,7 +20,6 @@ import {
   StatCard,
 } from "@/components/finance-ui";
 import { cn } from "@/lib/utils";
-import { RouteNotFound } from "@/components/finance-ui";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   validateSearch: (search: Record<string, unknown>): { month?: string } => {
