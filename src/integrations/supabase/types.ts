@@ -189,6 +189,48 @@ export type Database = {
           },
         ]
       }
+      income_receipts: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          income_transaction_id: string
+          received_date: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          income_transaction_id: string
+          received_date: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          income_transaction_id?: string
+          received_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "income_receipts_income_owner_fk"
+            columns: ["income_transaction_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "income_transactions"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "income_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       income_transactions: {
         Row: {
           amount: number
