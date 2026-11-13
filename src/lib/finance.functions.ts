@@ -203,7 +203,6 @@ export const getDashboard = createServerFn({ method: "POST" })
       supabase
         .from("income_transactions")
         .select("id, title, amount, due_date, receipts:income_receipts(amount)")
-        .gte("due_date", today)
         .lte("due_date", horizon),
       supabase
         .from("emi_payments")
@@ -287,7 +286,7 @@ export const getDashboard = createServerFn({ method: "POST" })
             ),
           ),
           due_date: i.due_date ?? today,
-          overdue: false,
+          overdue: (i.due_date ?? today) < today,
         }))
         .filter((i) => i.amount > 0),
     ].sort((a, b) => a.due_date.localeCompare(b.due_date));
@@ -681,7 +680,7 @@ export const listIncome = createServerFn({ method: "POST" })
     const { data, error } = await supabase
       .from("income_transactions")
       .select("*, investment:investments(name), receipts:income_receipts(*)")
-      .order("received_date", { ascending: false });
+      .order("due_date", { ascending: false });
     if (error) throw new Error(error.message);
     return { income: data ?? [] };
   });
@@ -707,7 +706,7 @@ export const saveIncome = createServerFn({ method: "POST" })
       title: data.title,
       category: data.category,
       amount: data.amount,
-      received_date: data.received_date,
+      received_date: data.due_date,
       due_date: data.due_date,
       status: "expected",
       recurrence: data.recurrence,
