@@ -36,6 +36,13 @@
       "when": 1794548053974,
       "tag": "0004_sync_income_receipt_status",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794548107391,
+      "tag": "0005_harden_income_receipt_triggers",
+      "breakpoints": true
     }
   ]
 }
