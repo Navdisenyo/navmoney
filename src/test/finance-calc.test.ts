@@ -5,11 +5,13 @@ import {
   calculateInvestmentEarning,
   formatCompact,
   formatCurrency,
+  incomeBalance,
   monthlyEquivalentRate,
   nextRecurrenceDate,
   projectValue,
   requireNonNegative,
   requirePositive,
+  requireWithinIncomeBalance,
   roundMoney,
   savingsRate,
   sumMoney,
@@ -25,6 +27,18 @@ describe("roundMoney", () => {
 
   it("sumMoney rounds once at the end", () => {
     expect(sumMoney([0.1, 0.2, 0.3])).toBe(0.6);
+  });
+});
+
+describe("partial income payments", () => {
+  it("shows 12,000 remaining after 9,000 is received against 21,000", () => {
+    expect(incomeBalance(21000, [9000])).toEqual({ received: 9000, remaining: 12000 });
+  });
+
+  it("rejects payments greater than the outstanding income balance", () => {
+    expect(() => requireWithinIncomeBalance(21000, 9000, 12000.01)).toThrow(
+      "Payment cannot exceed the remaining income balance",
+    );
   });
 });
 

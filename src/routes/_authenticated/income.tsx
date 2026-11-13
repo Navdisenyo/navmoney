@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, BadgeCheck, RotateCcw } from "lucide-react";
+import { Plus, Pencil, Trash2, CircleDollarSign, CalendarDays } from "lucide-react";
 
 import {
   bootstrapQueryOptions,
@@ -11,8 +11,13 @@ import {
   investmentsQueryOptions,
   type IncomeRow,
 } from "@/lib/finance-queries";
-import { deleteIncome, incomeSchema, saveIncome } from "@/lib/finance.functions";
+import {
+  deleteIncome,
+  saveIncome,
+  saveIncomeReceipt,
+} from "@/lib/finance.functions";
 import { formatCurrency, formatDate, sumMoney, todayISO } from "@/lib/finance-calc";
+import { incomeBalance } from "@/lib/finance-calc";
 import {
   INCOME_CATEGORY_LABELS,
   INCOME_CATEGORY_OPTIONS,
@@ -78,8 +83,7 @@ type FormState = {
   title: string;
   category: string;
   amount: string;
-  received_date: string;
-  status: string;
+  due_date: string;
   recurrence: string;
   investment_id: string;
   notes: string;
@@ -89,8 +93,7 @@ const blankForm: FormState = {
   title: "",
   category: "salary",
   amount: "",
-  received_date: todayISO(),
-  status: "received",
+  due_date: todayISO(),
   recurrence: "one_time",
   investment_id: "none",
   notes: "",
@@ -101,8 +104,7 @@ function toForm(row: IncomeRow): FormState {
     title: row.title,
     category: row.category,
     amount: String(row.amount ?? ""),
-    received_date: row.received_date,
-    status: row.status,
+    due_date: row.due_date ?? row.received_date,
     recurrence: row.recurrence,
     investment_id: row.investment_id ?? "none",
     notes: row.notes ?? "",
@@ -119,11 +121,17 @@ function IncomePage() {
 
   const queryClient = useQueryClient();
   const saveFn = useServerFn(saveIncome);
+  const saveReceiptFn = useServerFn(saveIncomeReceipt);
   const deleteFn = useServerFn(deleteIncome);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<IncomeRow | null>(null);
   const [form, setForm] = useState<FormState>(blankForm);
+  const [paymentIncome, setPaymentIncome] = useState<IncomeRow | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<IncomeRow["receipts"][number] | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(todayISO());
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
 
   function invalidate() {
     return Promise.all([
@@ -141,13 +149,11 @@ function IncomePage() {
         title: values.title,
         category: values.category as never,
         amount: num(values.amount) ?? 0,
-        received_date: values.received_date,
-        status: values.status as never,
+        due_date: values.due_date,
         recurrence: values.recurrence as never,
         investment_id: values.investment_id === "none" ? null : values.investment_id,
         notes: values.notes || null,
       };
-      void incomeSchema;
       return saveFn({ data: parsed });
     },
     onSuccess: async () => {
@@ -158,26 +164,24 @@ function IncomePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const toggleStatus = useMutation({
-    mutationFn: ({ row, newStatus }: { row: IncomeRow; newStatus: "received" | "expected" }) =>
-      saveFn({
+  const savePayment = useMutation({
+    mutationFn: () => {
+      if (!paymentIncome) throw new Error("Choose an income item first");
+      return saveReceiptFn({
         data: {
-          id: row.id,
-          title: row.title,
-          category: row.category as never,
-          amount: Number(row.amount),
-          received_date: row.received_date,
-          status: newStatus,
-          recurrence: row.recurrence as never,
-          investment_id: row.investment_id ?? null,
-          notes: row.notes ?? null,
+          ...(editingReceipt ? { id: editingReceipt.id } : {}),
+          income_transaction_id: paymentIncome.id,
+          amount: Number(paymentAmount),
+          received_date: paymentDate,
         },
-      }),
-    onSuccess: async (_res, vars) => {
+      });
+    },
+    onSuccess: async () => {
       await invalidate();
-      toast.success(
-        vars.newStatus === "received" ? "Marked as received" : "Marked as pending / not received",
-      );
+      toast.success(editingReceipt ? "Payment updated" : "Payment recorded");
+      setPaymentDialogOpen(false);
+      setPaymentIncome(null);
+      setEditingReceipt(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -203,6 +207,14 @@ function IncomePage() {
     setDialogOpen(true);
   }
 
+  function openPayment(row: IncomeRow, receipt?: IncomeRow["receipts"][number]) {
+    setPaymentIncome(row);
+    setEditingReceipt(receipt ?? null);
+    setPaymentAmount(receipt ? String(receipt.amount) : "");
+    setPaymentDate(receipt?.received_date ?? todayISO());
+    setPaymentDialogOpen(true);
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || form.amount.trim() === "" || Number(form.amount) <= 0) {
@@ -217,25 +229,23 @@ function IncomePage() {
   const [filter, setFilter] = useState<"all" | "investments" | "other">("all");
 
   const curMonth = todayISO().slice(0, 7);
+  const allReceipts = data.income.flatMap((row) => row.receipts ?? []);
   const totalReceivedThisMonth = sumMoney(
-    data.income
-      .filter((r) => r.status === "received" && r.received_date.startsWith(curMonth))
-      .map((r) => Number(r.amount)),
+    allReceipts.filter((receipt) => receipt.received_date.startsWith(curMonth)).map((r) => Number(r.amount)),
   );
   const investmentIncomeThisMonth = sumMoney(
     data.income
       .filter(
-        (r) =>
-          r.status === "received" &&
-          r.category === "investment_income" &&
-          r.received_date.startsWith(curMonth),
+        (r) => r.category === "investment_income",
       )
-      .map((r) => Number(r.amount)),
+      .flatMap((r) => r.receipts ?? [])
+      .filter((receipt) => receipt.received_date.startsWith(curMonth))
+      .map((receipt) => Number(receipt.amount)),
   );
   const totalExpectedThisMonth = sumMoney(
-    data.income
-      .filter((r) => r.status === "expected" && r.received_date.startsWith(curMonth))
-      .map((r) => Number(r.amount)),
+    data.income.filter((r) => (r.due_date ?? r.received_date).startsWith(curMonth)).map((row) =>
+      incomeBalance(Number(row.amount), (row.receipts ?? []).map((receipt) => Number(receipt.amount))).remaining,
+    ),
   );
 
   const filteredIncome = data.income.filter((row) => {
@@ -334,9 +344,9 @@ function IncomePage() {
                     }
                   >
                     {row.status === "received"
-                      ? "Received"
-                      : row.received_date < todayISO()
-                        ? "Pending / Not received"
+                      ? "Paid"
+                      : (row.due_date ?? row.received_date) < todayISO()
+                        ? "Overdue"
                         : "Expected"}
                   </Badge>
                   {row.category === "investment_income" ? (
@@ -347,39 +357,60 @@ function IncomePage() {
                       From Investment
                     </Badge>
                   ) : null}
+                  {(row.receipts?.length ?? 0) > 0 && row.status !== "received" ? (
+                    <Badge variant="secondary">Partially paid</Badge>
+                  ) : null}
                   {row.recurrence !== "one_time" ? (
                     <Badge variant="secondary">{RECURRENCE_LABELS[row.recurrence]}</Badge>
                   ) : null}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {INCOME_CATEGORY_LABELS[row.category] ?? row.category} ·{" "}
-                  {formatDate(row.received_date, df)}
+                  Due {formatDate(row.due_date ?? row.received_date, df)}
                   {row.investment ? ` · ${row.investment.name}` : ""}
                 </p>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  <span className="text-income">
+                    Received {fmt(incomeBalance(Number(row.amount), (row.receipts ?? []).map((receipt) => Number(receipt.amount))).received)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    Remaining {fmt(incomeBalance(Number(row.amount), (row.receipts ?? []).map((receipt) => Number(receipt.amount))).remaining)}
+                  </span>
+                </div>
+                {(row.receipts ?? []).length ? (
+                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    {[...(row.receipts ?? [])]
+                      .sort((a, b) => a.received_date.localeCompare(b.received_date))
+                      .map((receipt) => (
+                        <li key={receipt.id} className="flex items-center gap-2">
+                          <span>{formatDate(receipt.received_date, df)} · {fmt(Number(receipt.amount))}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-6"
+                            aria-label="Edit payment"
+                            onClick={() => openPayment(row, receipt)}
+                          >
+                            <Pencil className="size-3" />
+                          </Button>
+                        </li>
+                      ))}
+                  </ul>
+                ) : null}
               </div>
               <div className="flex items-center gap-1">
-                {row.status === "expected" ? (
+                {incomeBalance(Number(row.amount), (row.receipts ?? []).map((receipt) => Number(receipt.amount))).remaining > 0 ? (
                   <Button
                     variant="ghost"
                     size="sm"
                     className="text-xs text-income hover:text-income"
-                    disabled={toggleStatus.isPending}
-                    onClick={() => toggleStatus.mutate({ row, newStatus: "received" })}
+                    disabled={savePayment.isPending}
+                    onClick={() => openPayment(row)}
                   >
-                    <BadgeCheck className="size-4 mr-1" /> Mark received
+                    <CircleDollarSign className="size-4 mr-1" /> Add payment
                   </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                    title="Mark not received / pending"
-                    disabled={toggleStatus.isPending}
-                    onClick={() => toggleStatus.mutate({ row, newStatus: "expected" })}
-                  >
-                    <RotateCcw className="size-3.5 mr-1" /> Mark not received
-                  </Button>
-                )}
+                ) : null}
                 <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => openEdit(row)}>
                   <Pencil className="size-4" />
                 </Button>
@@ -440,7 +471,7 @@ function IncomePage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="inc-amount">Amount (₹)</Label>
+                <Label htmlFor="inc-amount">Total expected (₹)</Label>
                 <Input
                   id="inc-amount"
                   required
@@ -454,28 +485,14 @@ function IncomePage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="inc-date">
-                  {form.status === "expected" ? "Expected on" : "Received on"}
-                </Label>
+                <Label htmlFor="inc-date">Expected payment date</Label>
                 <Input
                   id="inc-date"
                   required
                   type="date"
-                  value={form.received_date}
-                  onChange={(e) => set("received_date")(e.target.value)}
+                  value={form.due_date}
+                  onChange={(e) => set("due_date")(e.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={set("status")}>
-                  <SelectTrigger aria-label="Income status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="received">Received</SelectItem>
-                    <SelectItem value="expected">Expected</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -529,6 +546,64 @@ function IncomePage() {
               </Button>
               <Button type="submit" disabled={save.isPending}>
                 {editing ? "Save changes" : "Add income"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingReceipt ? "Edit payment" : "Record payment"}</DialogTitle>
+          </DialogHeader>
+          {paymentIncome ? (
+            <div className="space-y-1 text-sm">
+              <p className="font-medium">{paymentIncome.title}</p>
+              <p className="text-muted-foreground">
+                Remaining {fmt(incomeBalance(Number(paymentIncome.amount), (paymentIncome.receipts ?? []).map((receipt) => Number(receipt.amount))).remaining)} of {fmt(Number(paymentIncome.amount))}
+              </p>
+            </div>
+          ) : null}
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!paymentAmount || Number(paymentAmount) <= 0) {
+                toast.error("Enter a payment amount greater than zero");
+                return;
+              }
+              savePayment.mutate();
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="payment-amount">Amount received</Label>
+              <Input
+                id="payment-amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={paymentAmount}
+                onChange={(event) => setPaymentAmount(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="payment-date">Received on</Label>
+              <Input
+                id="payment-date"
+                type="date"
+                required
+                value={paymentDate}
+                onChange={(event) => setPaymentDate(event.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={savePayment.isPending}>
+                {editingReceipt ? "Save payment" : "Record payment"}
               </Button>
             </DialogFooter>
           </form>

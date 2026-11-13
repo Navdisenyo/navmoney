@@ -36,3 +36,6 @@
   (user, category, title, received_date, amount) and on recurring expenses
   (user, title, due_date, amount); recurring-expense generation must rely on
   these plus an idempotent generation key, never "check then insert".
+- Income is stored as an expected transaction plus owner-scoped receipt rows;
+  database triggers enforce balances/status, and actual cash flow sums receipts
+  by their received dates.

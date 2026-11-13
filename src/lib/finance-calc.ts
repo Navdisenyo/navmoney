@@ -20,6 +20,26 @@ export function sumMoney(values: number[]): number {
   return roundMoney(values.reduce((acc, v) => acc + v, 0));
 }
 
+export function incomeBalance(total: number, receivedAmounts: number[]): {
+  received: number;
+  remaining: number;
+} {
+  const received = sumMoney(receivedAmounts);
+  return { received, remaining: roundMoney(Math.max(0, total - received)) };
+}
+
+export function requireWithinIncomeBalance(
+  total: number,
+  received: number,
+  payment: number,
+): number {
+  requirePositive(payment, "Payment");
+  if (roundMoney(received + payment) > roundMoney(total)) {
+    throw new Error("Payment cannot exceed the remaining income balance");
+  }
+  return payment;
+}
+
 export function requirePositive(value: number, label = "Amount"): number {
   if (!(typeof value === "number" && Number.isFinite(value) && value > 0)) {
     throw new Error(`${label} must be greater than 0`);

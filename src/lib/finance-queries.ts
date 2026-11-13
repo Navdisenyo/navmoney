@@ -17,6 +17,8 @@ export type Investment = Tables<"investments">;
 export type Loan = Tables<"loans">;
 
 export type IncomeRow = Tables<"income_transactions"> & {
+  due_date: string | null;
+  receipts: Tables<"income_receipts">[];
   investment: { name: string } | null;
 };
 
