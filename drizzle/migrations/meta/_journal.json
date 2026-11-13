@@ -29,6 +29,13 @@
       "when": 1794547982111,
       "tag": "0003_income_due_dates_and_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794548053974,
+      "tag": "0004_sync_income_receipt_status",
+      "breakpoints": true
     }
   ]
 }
