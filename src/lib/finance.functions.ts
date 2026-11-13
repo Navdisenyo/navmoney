@@ -167,9 +167,8 @@ export const getDashboard = createServerFn({ method: "POST" })
       settings,
     ] = await Promise.all([
       supabase
-        .from("income_transactions")
+        .from("income_receipts")
         .select("amount")
-        .eq("status", "received")
         .gte("received_date", start)
         .lt("received_date", end),
       supabase
@@ -203,10 +202,9 @@ export const getDashboard = createServerFn({ method: "POST" })
         .lte("due_date", horizon),
       supabase
         .from("income_transactions")
-        .select("id, title, amount, received_date")
-        .eq("status", "expected")
-        .gte("received_date", today)
-        .lte("received_date", horizon),
+        .select("id, title, amount, due_date, receipts:income_receipts(amount)")
+        .gte("due_date", today)
+        .lte("due_date", horizon),
       supabase
         .from("emi_payments")
         .select("amount")
@@ -215,9 +213,8 @@ export const getDashboard = createServerFn({ method: "POST" })
       supabase.from("investments").select("current_value, principal_amount, status"),
       supabase.from("loans").select("outstanding_principal, status"),
       supabase
-        .from("income_transactions")
-        .select("id, title, amount, received_date")
-        .eq("status", "received")
+        .from("income_receipts")
+        .select("id, amount, received_date, income:income_transactions(title)")
         .order("received_date", { ascending: false })
         .limit(8),
       supabase
@@ -274,21 +271,32 @@ export const getDashboard = createServerFn({ method: "POST" })
         due_date: e.due_date,
         overdue: e.due_date < today,
       })),
-      ...(upcomingIncome.data ?? []).map((i) => ({
-        kind: "income" as const,
-        id: i.id,
-        title: i.title,
-        amount: Number(i.amount),
-        due_date: i.received_date,
-        overdue: false,
-      })),
+      ...(upcomingIncome.data ?? [])
+        .map((i) => ({
+          kind: "income" as const,
+          id: i.id,
+          title: i.title,
+          amount: roundMoney(
+            Math.max(
+              0,
+              Number(i.amount) -
+                (i.receipts ?? []).reduce(
+                  (total, receipt) => total + Number(receipt.amount),
+                  0,
+                ),
+            ),
+          ),
+          due_date: i.due_date ?? today,
+          overdue: false,
+        }))
+        .filter((i) => i.amount > 0),
     ].sort((a, b) => a.due_date.localeCompare(b.due_date));
 
     const recent = [
       ...(recentIncome.data ?? []).map((i) => ({
         kind: "income" as const,
         id: i.id,
-        title: i.title,
+        title: (i.income as { title: string } | null)?.title ?? "Income payment",
         amount: Number(i.amount),
         date: i.received_date,
       })),
@@ -454,6 +462,15 @@ export async function materializeInvestmentIncome(supabase: SupabaseClient, user
         if (insErr && insErr.code !== "23505") {
           console.warn("[investment income insert]", insErr.message);
         } else if (inserted) {
+          if (isPastOrToday) {
+            const { error: receiptError } = await supabase.from("income_receipts").insert({
+              user_id: userId,
+              income_transaction_id: inserted.id,
+              amount: periodicAmount,
+              received_date: payoutDate,
+            });
+            if (receiptError) console.warn("[investment income receipt]", receiptError.message);
+          }
           existingMap.set(key, {
             id: inserted.id,
             status: inserted.status,
@@ -503,9 +520,21 @@ export async function materializeRecurringIncome(supabase: SupabaseClient, userI
     }
     if (clones.length > 0) {
       for (const clone of clones) {
-        const { error: insertError } = await supabase.from("income_transactions").insert(clone);
+        const { data: inserted, error: insertError } = await supabase
+          .from("income_transactions")
+          .insert(clone)
+          .select("id")
+          .maybeSingle();
         if (insertError && insertError.code !== "23505") {
           console.warn("[recurring income generation]", insertError.message);
+        } else if (inserted && clone.status === "received") {
+          const { error: receiptError } = await supabase.from("income_receipts").insert({
+            user_id: userId,
+            income_transaction_id: inserted.id,
+            amount: clone.amount,
+            received_date: clone.received_date,
+          });
+          if (receiptError) console.warn("[recurring income receipt]", receiptError.message);
         }
       }
     }
@@ -651,7 +680,7 @@ export const listIncome = createServerFn({ method: "POST" })
     ]);
     const { data, error } = await supabase
       .from("income_transactions")
-      .select("*, investment:investments(name)")
+      .select("*, investment:investments(name), receipts:income_receipts(*)")
       .order("received_date", { ascending: false });
     if (error) throw new Error(error.message);
     return { income: data ?? [] };
@@ -663,7 +692,7 @@ export const incomeSchema = z.object({
   category: z.enum(["salary", "business", "rental", "investment_income", "freelance", "other"]),
   amount: z.number().positive(),
   received_date: z.string().regex(dateRe),
-  status: z.enum(["expected", "received"]),
+  due_date: z.string().regex(dateRe),
   recurrence: z.enum(["one_time", "weekly", "monthly", "quarterly", "annually"]),
   investment_id: z.string().uuid().nullish(),
   notes: z.string().max(500).nullish(),
@@ -679,7 +708,8 @@ export const saveIncome = createServerFn({ method: "POST" })
       category: data.category,
       amount: data.amount,
       received_date: data.received_date,
-      status: data.status,
+      due_date: data.due_date,
+      status: "expected",
       recurrence: data.recurrence,
       // income may only link to an investment for investment_income (DB check)
       investment_id: data.category === "investment_income" ? (data.investment_id ?? null) : null,
@@ -698,6 +728,67 @@ export const saveIncome = createServerFn({ method: "POST" })
       .from("income_transactions")
       .insert({ ...payload, user_id: userId });
     if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+export const incomeReceiptSchema = z.object({
+  id: z.string().uuid().optional(),
+  income_transaction_id: z.string().uuid(),
+  amount: z.number().positive(),
+  received_date: z.string().regex(dateRe),
+});
+
+export const saveIncomeReceipt = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => incomeReceiptSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: income, error: incomeError } = await supabase
+      .from("income_transactions")
+      .select("id, amount")
+      .eq("id", data.income_transaction_id)
+      .eq("user_id", userId)
+      .single();
+    if (incomeError || !income) throw new Error("Income record not found");
+
+    let received = 0;
+    if (data.id) {
+      const { data: current, error: currentError } = await supabase
+        .from("income_receipts")
+        .select("id, amount")
+        .eq("id", data.id)
+        .eq("income_transaction_id", income.id)
+        .eq("user_id", userId)
+        .single();
+      if (currentError || !current) throw new Error("Payment not found");
+      received -= Number(current.amount);
+    }
+    const { data: receipts, error: receiptsError } = await supabase
+      .from("income_receipts")
+      .select("amount")
+      .eq("income_transaction_id", income.id)
+      .eq("user_id", userId);
+    if (receiptsError) throw new Error(receiptsError.message);
+    received += (receipts ?? []).reduce((total, receipt) => total + Number(receipt.amount), 0);
+    if (roundMoney(received + data.amount) > roundMoney(Number(income.amount))) {
+      throw new Error("Payment cannot exceed the remaining income balance");
+    }
+
+    const payload = {
+      amount: data.amount,
+      received_date: data.received_date,
+      income_transaction_id: income.id,
+      user_id: userId,
+    };
+    const result = data.id
+      ? await supabase
+          .from("income_receipts")
+          .update({ amount: payload.amount, received_date: payload.received_date })
+          .eq("id", data.id)
+          .eq("income_transaction_id", income.id)
+          .eq("user_id", userId)
+      : await supabase.from("income_receipts").insert(payload);
+    if (result.error) throw new Error(result.error.message);
     return { ok: true as const };
   });
 
@@ -1192,9 +1283,8 @@ export const getReports = createServerFn({ method: "POST" })
 
     const [incomeRes, expenseRes, investRes] = await Promise.all([
       supabase
-        .from("income_transactions")
-        .select("amount, category, received_date")
-        .eq("status", "received")
+        .from("income_receipts")
+        .select("amount, received_date, income:income_transactions(category)")
         .gte("received_date", `${startISO.slice(0, 7)}-01`),
       supabase
         .from("expenses")
@@ -1231,7 +1321,8 @@ export const getReports = createServerFn({ method: "POST" })
 
     const incomeMap = new Map<string, number>();
     for (const row of incomeRes.data ?? []) {
-      incomeMap.set(row.category, (incomeMap.get(row.category) ?? 0) + Number(row.amount));
+      const category = (row.income as { category: string } | null)?.category ?? "other";
+      incomeMap.set(category, (incomeMap.get(category) ?? 0) + Number(row.amount));
     }
     const incomeByCategory = [...incomeMap.entries()]
       .map(([category, total]) => ({ category, total: roundMoney(total) }))
